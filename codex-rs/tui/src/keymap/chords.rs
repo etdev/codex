@@ -25,7 +25,9 @@ use crossterm::event::KeyModifiers;
 use std::time::Duration;
 use tokio::time::Instant;
 
-const FIRST_DISPATCH_FUNCTION_KEY: u8 = 128;
+// User config only accepts `f1`-`f24` (see `MAX_FUNCTION_KEY`), so the band above that is
+// free for internal tokens. It must stay wide enough for the whole action inventory.
+const FIRST_DISPATCH_FUNCTION_KEY: u8 = 64;
 const LAST_DISPATCH_FUNCTION_KEY: u8 = u8::MAX;
 const LIST_RESERVED_BINDINGS: &[(&str, KeyBinding)] = &[
     ("cancel", ctrl(KeyCode::Char('c'))),

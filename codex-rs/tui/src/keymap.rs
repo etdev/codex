@@ -180,30 +180,51 @@ pub(crate) struct VimNormalKeymap {
     pub(crate) move_word_forward: Vec<KeyBinding>,
     pub(crate) move_word_backward: Vec<KeyBinding>,
     pub(crate) move_word_end: Vec<KeyBinding>,
+    pub(crate) move_big_word_forward: Vec<KeyBinding>,
+    pub(crate) move_big_word_backward: Vec<KeyBinding>,
+    pub(crate) move_big_word_end: Vec<KeyBinding>,
     pub(crate) move_line_start: Vec<KeyBinding>,
+    pub(crate) move_first_non_blank: Vec<KeyBinding>,
     pub(crate) move_line_end: Vec<KeyBinding>,
+    pub(crate) move_buffer_start: Vec<KeyBinding>,
+    pub(crate) move_buffer_end: Vec<KeyBinding>,
+    pub(crate) undo: Vec<KeyBinding>,
+    pub(crate) repeat_change: Vec<KeyBinding>,
+    pub(crate) replace_char: Vec<KeyBinding>,
     pub(crate) delete_char: Vec<KeyBinding>,
     pub(crate) substitute_char: Vec<KeyBinding>,
     pub(crate) delete_to_line_end: Vec<KeyBinding>,
     pub(crate) change_to_line_end: Vec<KeyBinding>,
     pub(crate) yank_line: Vec<KeyBinding>,
     pub(crate) paste_after: Vec<KeyBinding>,
+    pub(crate) paste_before: Vec<KeyBinding>,
+    pub(crate) join_lines: Vec<KeyBinding>,
+    pub(crate) indent_lines: Vec<KeyBinding>,
+    pub(crate) dedent_lines: Vec<KeyBinding>,
+    pub(crate) find_forward: Vec<KeyBinding>,
+    pub(crate) find_backward: Vec<KeyBinding>,
+    pub(crate) till_forward: Vec<KeyBinding>,
+    pub(crate) till_backward: Vec<KeyBinding>,
+    pub(crate) repeat_find: Vec<KeyBinding>,
+    pub(crate) repeat_find_reverse: Vec<KeyBinding>,
     pub(crate) start_delete_operator: Vec<KeyBinding>,
     pub(crate) start_yank_operator: Vec<KeyBinding>,
     pub(crate) start_change_operator: Vec<KeyBinding>,
     pub(crate) cancel_operator: Vec<KeyBinding>,
 }
 
-/// Vim operator-pending keybindings active after `d` or `y` in normal mode.
+/// Vim operator-pending keybindings active after `d`, `y`, or `c` in normal mode.
 ///
-/// When an operator (`start_delete_operator` or `start_yank_operator`) is
+/// When an operator (`start_delete_operator`, `start_yank_operator`, or
+/// `start_change_operator`) is
 /// pressed, the next keypress is matched against this context to determine the
-/// motion range. Repeating the operator key (`dd`, `yy`) acts on the whole
+/// motion range. Repeating the operator key (`dd`, `yy`, `cc`) acts on the whole
 /// line. `Esc` cancels the pending operator and returns to normal mode.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct VimOperatorKeymap {
     pub(crate) delete_line: Vec<KeyBinding>,
     pub(crate) yank_line: Vec<KeyBinding>,
+    pub(crate) change_line: Vec<KeyBinding>,
     pub(crate) motion_left: Vec<KeyBinding>,
     pub(crate) motion_right: Vec<KeyBinding>,
     pub(crate) motion_up: Vec<KeyBinding>,
@@ -211,8 +232,20 @@ pub(crate) struct VimOperatorKeymap {
     pub(crate) motion_word_forward: Vec<KeyBinding>,
     pub(crate) motion_word_backward: Vec<KeyBinding>,
     pub(crate) motion_word_end: Vec<KeyBinding>,
+    pub(crate) motion_big_word_forward: Vec<KeyBinding>,
+    pub(crate) motion_big_word_backward: Vec<KeyBinding>,
+    pub(crate) motion_big_word_end: Vec<KeyBinding>,
     pub(crate) motion_line_start: Vec<KeyBinding>,
+    pub(crate) motion_first_non_blank: Vec<KeyBinding>,
     pub(crate) motion_line_end: Vec<KeyBinding>,
+    pub(crate) motion_buffer_start: Vec<KeyBinding>,
+    pub(crate) motion_buffer_end: Vec<KeyBinding>,
+    pub(crate) motion_find_forward: Vec<KeyBinding>,
+    pub(crate) motion_find_backward: Vec<KeyBinding>,
+    pub(crate) motion_till_forward: Vec<KeyBinding>,
+    pub(crate) motion_till_backward: Vec<KeyBinding>,
+    pub(crate) motion_repeat_find: Vec<KeyBinding>,
+    pub(crate) motion_repeat_find_reverse: Vec<KeyBinding>,
     pub(crate) select_inner_text_object: Vec<KeyBinding>,
     pub(crate) select_around_text_object: Vec<KeyBinding>,
     pub(crate) cancel: Vec<KeyBinding>,
@@ -701,14 +734,48 @@ impl RuntimeKeymap {
             move_word_forward: resolve_local!(keymap, defaults, vim_normal, move_word_forward),
             move_word_backward: resolve_local!(keymap, defaults, vim_normal, move_word_backward),
             move_word_end: resolve_local!(keymap, defaults, vim_normal, move_word_end),
+            move_big_word_forward: resolve_local!(
+                keymap,
+                defaults,
+                vim_normal,
+                move_big_word_forward
+            ),
+            move_big_word_backward: resolve_local!(
+                keymap,
+                defaults,
+                vim_normal,
+                move_big_word_backward
+            ),
+            move_big_word_end: resolve_local!(keymap, defaults, vim_normal, move_big_word_end),
             move_line_start: resolve_local!(keymap, defaults, vim_normal, move_line_start),
+            move_first_non_blank: resolve_local!(
+                keymap,
+                defaults,
+                vim_normal,
+                move_first_non_blank
+            ),
             move_line_end: resolve_local!(keymap, defaults, vim_normal, move_line_end),
+            move_buffer_start: resolve_local!(keymap, defaults, vim_normal, move_buffer_start),
+            move_buffer_end: resolve_local!(keymap, defaults, vim_normal, move_buffer_end),
+            undo: resolve_local!(keymap, defaults, vim_normal, undo),
+            repeat_change: resolve_local!(keymap, defaults, vim_normal, repeat_change),
+            replace_char: resolve_local!(keymap, defaults, vim_normal, replace_char),
             delete_char: resolve_local!(keymap, defaults, vim_normal, delete_char),
             substitute_char: resolve_local!(keymap, defaults, vim_normal, substitute_char),
             delete_to_line_end: resolve_local!(keymap, defaults, vim_normal, delete_to_line_end),
             change_to_line_end: resolve_local!(keymap, defaults, vim_normal, change_to_line_end),
             yank_line: resolve_local!(keymap, defaults, vim_normal, yank_line),
             paste_after: resolve_local!(keymap, defaults, vim_normal, paste_after),
+            paste_before: resolve_local!(keymap, defaults, vim_normal, paste_before),
+            join_lines: resolve_local!(keymap, defaults, vim_normal, join_lines),
+            indent_lines: resolve_local!(keymap, defaults, vim_normal, indent_lines),
+            dedent_lines: resolve_local!(keymap, defaults, vim_normal, dedent_lines),
+            find_forward: resolve_local!(keymap, defaults, vim_normal, find_forward),
+            find_backward: resolve_local!(keymap, defaults, vim_normal, find_backward),
+            till_forward: resolve_local!(keymap, defaults, vim_normal, till_forward),
+            till_backward: resolve_local!(keymap, defaults, vim_normal, till_backward),
+            repeat_find: resolve_local!(keymap, defaults, vim_normal, repeat_find),
+            repeat_find_reverse: resolve_local!(keymap, defaults, vim_normal, repeat_find_reverse),
             start_delete_operator: resolve_local!(
                 keymap,
                 defaults,
@@ -779,12 +846,36 @@ impl RuntimeKeymap {
                 vim_normal.move_word_end.as_slice(),
             ),
             (
+                keymap.vim_normal.move_big_word_forward.as_ref(),
+                vim_normal.move_big_word_forward.as_slice(),
+            ),
+            (
+                keymap.vim_normal.move_big_word_backward.as_ref(),
+                vim_normal.move_big_word_backward.as_slice(),
+            ),
+            (
+                keymap.vim_normal.move_big_word_end.as_ref(),
+                vim_normal.move_big_word_end.as_slice(),
+            ),
+            (
                 keymap.vim_normal.move_line_start.as_ref(),
                 vim_normal.move_line_start.as_slice(),
             ),
             (
                 keymap.vim_normal.move_line_end.as_ref(),
                 vim_normal.move_line_end.as_slice(),
+            ),
+            (
+                keymap.vim_normal.move_first_non_blank.as_ref(),
+                vim_normal.move_first_non_blank.as_slice(),
+            ),
+            (
+                keymap.vim_normal.repeat_change.as_ref(),
+                vim_normal.repeat_change.as_slice(),
+            ),
+            (
+                keymap.vim_normal.replace_char.as_ref(),
+                vim_normal.replace_char.as_slice(),
             ),
             (
                 keymap.vim_normal.delete_char.as_ref(),
@@ -807,6 +898,46 @@ impl RuntimeKeymap {
                 vim_normal.paste_after.as_slice(),
             ),
             (
+                keymap.vim_normal.paste_before.as_ref(),
+                vim_normal.paste_before.as_slice(),
+            ),
+            (
+                keymap.vim_normal.join_lines.as_ref(),
+                vim_normal.join_lines.as_slice(),
+            ),
+            (
+                keymap.vim_normal.indent_lines.as_ref(),
+                vim_normal.indent_lines.as_slice(),
+            ),
+            (
+                keymap.vim_normal.dedent_lines.as_ref(),
+                vim_normal.dedent_lines.as_slice(),
+            ),
+            (
+                keymap.vim_normal.find_forward.as_ref(),
+                vim_normal.find_forward.as_slice(),
+            ),
+            (
+                keymap.vim_normal.find_backward.as_ref(),
+                vim_normal.find_backward.as_slice(),
+            ),
+            (
+                keymap.vim_normal.till_forward.as_ref(),
+                vim_normal.till_forward.as_slice(),
+            ),
+            (
+                keymap.vim_normal.till_backward.as_ref(),
+                vim_normal.till_backward.as_slice(),
+            ),
+            (
+                keymap.vim_normal.repeat_find.as_ref(),
+                vim_normal.repeat_find.as_slice(),
+            ),
+            (
+                keymap.vim_normal.repeat_find_reverse.as_ref(),
+                vim_normal.repeat_find_reverse.as_slice(),
+            ),
+            (
                 keymap.vim_normal.start_delete_operator.as_ref(),
                 vim_normal.start_delete_operator.as_slice(),
             ),
@@ -825,19 +956,109 @@ impl RuntimeKeymap {
         ]);
 
         if keymap.vim_normal.start_change_operator.is_none() {
-            vim_normal
-                .start_change_operator
-                .retain(|binding| !configured_vim_normal_bindings_to_preserve.contains(binding));
+            vim_normal.start_change_operator.retain(|binding| {
+                !contains_equivalent_binding(&configured_vim_normal_bindings_to_preserve, binding)
+            });
         }
         if keymap.vim_normal.substitute_char.is_none() {
-            vim_normal
-                .substitute_char
-                .retain(|binding| !configured_vim_normal_bindings_to_preserve.contains(binding));
+            vim_normal.substitute_char.retain(|binding| {
+                !contains_equivalent_binding(&configured_vim_normal_bindings_to_preserve, binding)
+            });
+        }
+        if keymap.vim_normal.move_buffer_start.is_none() {
+            vim_normal.move_buffer_start.retain(|binding| {
+                !contains_equivalent_binding(&configured_vim_normal_bindings_to_preserve, binding)
+            });
+        }
+        if keymap.vim_normal.move_buffer_end.is_none() {
+            vim_normal.move_buffer_end.retain(|binding| {
+                !contains_equivalent_binding(&configured_vim_normal_bindings_to_preserve, binding)
+            });
+        }
+        if keymap.vim_normal.undo.is_none() {
+            vim_normal.undo.retain(|binding| {
+                !contains_equivalent_binding(&configured_vim_normal_bindings_to_preserve, binding)
+            });
+        }
+        prune_new_defaults(
+            keymap.vim_normal.repeat_change.as_ref(),
+            &mut vim_normal.repeat_change,
+            &configured_vim_normal_bindings_to_preserve,
+        );
+        prune_new_defaults(
+            keymap.vim_normal.replace_char.as_ref(),
+            &mut vim_normal.replace_char,
+            &configured_vim_normal_bindings_to_preserve,
+        );
+        for (configured, bindings) in [
+            (
+                keymap.vim_normal.move_big_word_forward.as_ref(),
+                &mut vim_normal.move_big_word_forward,
+            ),
+            (
+                keymap.vim_normal.move_big_word_backward.as_ref(),
+                &mut vim_normal.move_big_word_backward,
+            ),
+            (
+                keymap.vim_normal.move_big_word_end.as_ref(),
+                &mut vim_normal.move_big_word_end,
+            ),
+            (
+                keymap.vim_normal.move_first_non_blank.as_ref(),
+                &mut vim_normal.move_first_non_blank,
+            ),
+            (
+                keymap.vim_normal.paste_before.as_ref(),
+                &mut vim_normal.paste_before,
+            ),
+            (
+                keymap.vim_normal.join_lines.as_ref(),
+                &mut vim_normal.join_lines,
+            ),
+            (
+                keymap.vim_normal.indent_lines.as_ref(),
+                &mut vim_normal.indent_lines,
+            ),
+            (
+                keymap.vim_normal.dedent_lines.as_ref(),
+                &mut vim_normal.dedent_lines,
+            ),
+            (
+                keymap.vim_normal.find_forward.as_ref(),
+                &mut vim_normal.find_forward,
+            ),
+            (
+                keymap.vim_normal.find_backward.as_ref(),
+                &mut vim_normal.find_backward,
+            ),
+            (
+                keymap.vim_normal.till_forward.as_ref(),
+                &mut vim_normal.till_forward,
+            ),
+            (
+                keymap.vim_normal.till_backward.as_ref(),
+                &mut vim_normal.till_backward,
+            ),
+            (
+                keymap.vim_normal.repeat_find.as_ref(),
+                &mut vim_normal.repeat_find,
+            ),
+            (
+                keymap.vim_normal.repeat_find_reverse.as_ref(),
+                &mut vim_normal.repeat_find_reverse,
+            ),
+        ] {
+            prune_new_defaults(
+                configured,
+                bindings,
+                &configured_vim_normal_bindings_to_preserve,
+            );
         }
 
         let mut vim_operator = VimOperatorKeymap {
             delete_line: resolve_local!(keymap, defaults, vim_operator, delete_line),
             yank_line: resolve_local!(keymap, defaults, vim_operator, yank_line),
+            change_line: resolve_local!(keymap, defaults, vim_operator, change_line),
             motion_left: resolve_local!(keymap, defaults, vim_operator, motion_left),
             motion_right: resolve_local!(keymap, defaults, vim_operator, motion_right),
             motion_up: resolve_local!(keymap, defaults, vim_operator, motion_up),
@@ -855,8 +1076,70 @@ impl RuntimeKeymap {
                 motion_word_backward
             ),
             motion_word_end: resolve_local!(keymap, defaults, vim_operator, motion_word_end),
+            motion_big_word_forward: resolve_local!(
+                keymap,
+                defaults,
+                vim_operator,
+                motion_big_word_forward
+            ),
+            motion_big_word_backward: resolve_local!(
+                keymap,
+                defaults,
+                vim_operator,
+                motion_big_word_backward
+            ),
+            motion_big_word_end: resolve_local!(
+                keymap,
+                defaults,
+                vim_operator,
+                motion_big_word_end
+            ),
             motion_line_start: resolve_local!(keymap, defaults, vim_operator, motion_line_start),
+            motion_first_non_blank: resolve_local!(
+                keymap,
+                defaults,
+                vim_operator,
+                motion_first_non_blank
+            ),
             motion_line_end: resolve_local!(keymap, defaults, vim_operator, motion_line_end),
+            motion_buffer_start: resolve_local!(
+                keymap,
+                defaults,
+                vim_operator,
+                motion_buffer_start
+            ),
+            motion_buffer_end: resolve_local!(keymap, defaults, vim_operator, motion_buffer_end),
+            motion_find_forward: resolve_local!(
+                keymap,
+                defaults,
+                vim_operator,
+                motion_find_forward
+            ),
+            motion_find_backward: resolve_local!(
+                keymap,
+                defaults,
+                vim_operator,
+                motion_find_backward
+            ),
+            motion_till_forward: resolve_local!(
+                keymap,
+                defaults,
+                vim_operator,
+                motion_till_forward
+            ),
+            motion_till_backward: resolve_local!(
+                keymap,
+                defaults,
+                vim_operator,
+                motion_till_backward
+            ),
+            motion_repeat_find: resolve_local!(keymap, defaults, vim_operator, motion_repeat_find),
+            motion_repeat_find_reverse: resolve_local!(
+                keymap,
+                defaults,
+                vim_operator,
+                motion_repeat_find_reverse
+            ),
             select_inner_text_object: resolve_local!(
                 keymap,
                 defaults,
@@ -910,6 +1193,18 @@ impl RuntimeKeymap {
                 vim_operator.motion_word_end.as_slice(),
             ),
             (
+                keymap.vim_operator.motion_big_word_forward.as_ref(),
+                vim_operator.motion_big_word_forward.as_slice(),
+            ),
+            (
+                keymap.vim_operator.motion_big_word_backward.as_ref(),
+                vim_operator.motion_big_word_backward.as_slice(),
+            ),
+            (
+                keymap.vim_operator.motion_big_word_end.as_ref(),
+                vim_operator.motion_big_word_end.as_slice(),
+            ),
+            (
                 keymap.vim_operator.motion_line_start.as_ref(),
                 vim_operator.motion_line_start.as_slice(),
             ),
@@ -918,20 +1213,117 @@ impl RuntimeKeymap {
                 vim_operator.motion_line_end.as_slice(),
             ),
             (
+                keymap.vim_operator.motion_first_non_blank.as_ref(),
+                vim_operator.motion_first_non_blank.as_slice(),
+            ),
+            (
+                keymap.vim_operator.motion_buffer_start.as_ref(),
+                vim_operator.motion_buffer_start.as_slice(),
+            ),
+            (
+                keymap.vim_operator.motion_buffer_end.as_ref(),
+                vim_operator.motion_buffer_end.as_slice(),
+            ),
+            (
+                keymap.vim_operator.motion_find_forward.as_ref(),
+                vim_operator.motion_find_forward.as_slice(),
+            ),
+            (
+                keymap.vim_operator.motion_find_backward.as_ref(),
+                vim_operator.motion_find_backward.as_slice(),
+            ),
+            (
+                keymap.vim_operator.motion_till_forward.as_ref(),
+                vim_operator.motion_till_forward.as_slice(),
+            ),
+            (
+                keymap.vim_operator.motion_till_backward.as_ref(),
+                vim_operator.motion_till_backward.as_slice(),
+            ),
+            (
+                keymap.vim_operator.motion_repeat_find.as_ref(),
+                vim_operator.motion_repeat_find.as_slice(),
+            ),
+            (
+                keymap.vim_operator.motion_repeat_find_reverse.as_ref(),
+                vim_operator.motion_repeat_find_reverse.as_slice(),
+            ),
+            (
                 keymap.vim_operator.cancel.as_ref(),
                 vim_operator.cancel.as_slice(),
             ),
         ]);
 
         if keymap.vim_operator.select_inner_text_object.is_none() {
-            vim_operator
-                .select_inner_text_object
-                .retain(|binding| !configured_vim_operator_bindings_to_preserve.contains(binding));
+            vim_operator.select_inner_text_object.retain(|binding| {
+                !contains_equivalent_binding(&configured_vim_operator_bindings_to_preserve, binding)
+            });
         }
         if keymap.vim_operator.select_around_text_object.is_none() {
-            vim_operator
-                .select_around_text_object
-                .retain(|binding| !configured_vim_operator_bindings_to_preserve.contains(binding));
+            vim_operator.select_around_text_object.retain(|binding| {
+                !contains_equivalent_binding(&configured_vim_operator_bindings_to_preserve, binding)
+            });
+        }
+        if keymap.vim_operator.change_line.is_none() {
+            vim_operator.change_line.retain(|binding| {
+                !contains_equivalent_binding(&configured_vim_operator_bindings_to_preserve, binding)
+            });
+        }
+        for (configured, bindings) in [
+            (
+                keymap.vim_operator.motion_big_word_forward.as_ref(),
+                &mut vim_operator.motion_big_word_forward,
+            ),
+            (
+                keymap.vim_operator.motion_big_word_backward.as_ref(),
+                &mut vim_operator.motion_big_word_backward,
+            ),
+            (
+                keymap.vim_operator.motion_big_word_end.as_ref(),
+                &mut vim_operator.motion_big_word_end,
+            ),
+            (
+                keymap.vim_operator.motion_first_non_blank.as_ref(),
+                &mut vim_operator.motion_first_non_blank,
+            ),
+            (
+                keymap.vim_operator.motion_buffer_start.as_ref(),
+                &mut vim_operator.motion_buffer_start,
+            ),
+            (
+                keymap.vim_operator.motion_buffer_end.as_ref(),
+                &mut vim_operator.motion_buffer_end,
+            ),
+            (
+                keymap.vim_operator.motion_find_forward.as_ref(),
+                &mut vim_operator.motion_find_forward,
+            ),
+            (
+                keymap.vim_operator.motion_find_backward.as_ref(),
+                &mut vim_operator.motion_find_backward,
+            ),
+            (
+                keymap.vim_operator.motion_till_forward.as_ref(),
+                &mut vim_operator.motion_till_forward,
+            ),
+            (
+                keymap.vim_operator.motion_till_backward.as_ref(),
+                &mut vim_operator.motion_till_backward,
+            ),
+            (
+                keymap.vim_operator.motion_repeat_find.as_ref(),
+                &mut vim_operator.motion_repeat_find,
+            ),
+            (
+                keymap.vim_operator.motion_repeat_find_reverse.as_ref(),
+                &mut vim_operator.motion_repeat_find_reverse,
+            ),
+        ] {
+            prune_new_defaults(
+                configured,
+                bindings,
+                &configured_vim_operator_bindings_to_preserve,
+            );
         }
 
         let vim_text_object = VimTextObjectKeymap {
@@ -1282,17 +1674,45 @@ impl RuntimeKeymap {
                     plain(KeyCode::Char('O'))
                 ],
                 move_left: default_bindings![plain(KeyCode::Char('h')), plain(KeyCode::Left)],
-                move_right: default_bindings![plain(KeyCode::Char('l')), plain(KeyCode::Right)],
+                move_right: default_bindings![
+                    plain(KeyCode::Char('l')),
+                    plain(KeyCode::Right),
+                    plain(KeyCode::Char(' '))
+                ],
                 move_up: default_bindings![plain(KeyCode::Char('k')), plain(KeyCode::Up)],
                 move_down: default_bindings![plain(KeyCode::Char('j')), plain(KeyCode::Down)],
                 move_word_forward: default_bindings![plain(KeyCode::Char('w'))],
                 move_word_backward: default_bindings![plain(KeyCode::Char('b'))],
                 move_word_end: default_bindings![plain(KeyCode::Char('e'))],
+                move_big_word_forward: default_bindings![
+                    shift(KeyCode::Char('w')),
+                    plain(KeyCode::Char('W'))
+                ],
+                move_big_word_backward: default_bindings![
+                    shift(KeyCode::Char('b')),
+                    plain(KeyCode::Char('B'))
+                ],
+                move_big_word_end: default_bindings![
+                    shift(KeyCode::Char('e')),
+                    plain(KeyCode::Char('E'))
+                ],
                 move_line_start: default_bindings![plain(KeyCode::Char('0'))],
+                move_first_non_blank: default_bindings![
+                    plain(KeyCode::Char('^')),
+                    shift(KeyCode::Char('^'))
+                ],
                 move_line_end: default_bindings![
                     plain(KeyCode::Char('$')),
                     shift(KeyCode::Char('$'))
                 ],
+                move_buffer_start: default_bindings![plain(KeyCode::Char('g'))],
+                move_buffer_end: default_bindings![
+                    shift(KeyCode::Char('g')),
+                    plain(KeyCode::Char('G'))
+                ],
+                undo: default_bindings![plain(KeyCode::Char('u'))],
+                repeat_change: default_bindings![plain(KeyCode::Char('.'))],
+                replace_char: default_bindings![plain(KeyCode::Char('r'))],
                 delete_char: default_bindings![plain(KeyCode::Char('x'))],
                 substitute_char: default_bindings![plain(KeyCode::Char('s'))],
                 delete_to_line_end: default_bindings![
@@ -1305,6 +1725,31 @@ impl RuntimeKeymap {
                 ],
                 yank_line: default_bindings![shift(KeyCode::Char('y')), plain(KeyCode::Char('Y'))],
                 paste_after: default_bindings![plain(KeyCode::Char('p'))],
+                paste_before: default_bindings![
+                    shift(KeyCode::Char('p')),
+                    plain(KeyCode::Char('P'))
+                ],
+                join_lines: default_bindings![shift(KeyCode::Char('j')), plain(KeyCode::Char('J'))],
+                indent_lines: default_bindings![
+                    plain(KeyCode::Char('>')),
+                    shift(KeyCode::Char('>'))
+                ],
+                dedent_lines: default_bindings![
+                    plain(KeyCode::Char('<')),
+                    shift(KeyCode::Char('<'))
+                ],
+                find_forward: default_bindings![plain(KeyCode::Char('f'))],
+                find_backward: default_bindings![
+                    shift(KeyCode::Char('f')),
+                    plain(KeyCode::Char('F'))
+                ],
+                till_forward: default_bindings![plain(KeyCode::Char('t'))],
+                till_backward: default_bindings![
+                    shift(KeyCode::Char('t')),
+                    plain(KeyCode::Char('T'))
+                ],
+                repeat_find: default_bindings![plain(KeyCode::Char(';'))],
+                repeat_find_reverse: default_bindings![plain(KeyCode::Char(','))],
                 start_delete_operator: default_bindings![plain(KeyCode::Char('d'))],
                 start_yank_operator: default_bindings![plain(KeyCode::Char('y'))],
                 start_change_operator: default_bindings![plain(KeyCode::Char('c'))],
@@ -1313,18 +1758,55 @@ impl RuntimeKeymap {
             vim_operator: VimOperatorKeymap {
                 delete_line: default_bindings![plain(KeyCode::Char('d'))],
                 yank_line: default_bindings![plain(KeyCode::Char('y'))],
+                change_line: default_bindings![plain(KeyCode::Char('c'))],
                 motion_left: default_bindings![plain(KeyCode::Char('h'))],
-                motion_right: default_bindings![plain(KeyCode::Char('l'))],
+                motion_right: default_bindings![
+                    plain(KeyCode::Char('l')),
+                    plain(KeyCode::Char(' '))
+                ],
                 motion_up: default_bindings![plain(KeyCode::Char('k'))],
                 motion_down: default_bindings![plain(KeyCode::Char('j'))],
                 motion_word_forward: default_bindings![plain(KeyCode::Char('w'))],
                 motion_word_backward: default_bindings![plain(KeyCode::Char('b'))],
                 motion_word_end: default_bindings![plain(KeyCode::Char('e'))],
+                motion_big_word_forward: default_bindings![
+                    shift(KeyCode::Char('w')),
+                    plain(KeyCode::Char('W'))
+                ],
+                motion_big_word_backward: default_bindings![
+                    shift(KeyCode::Char('b')),
+                    plain(KeyCode::Char('B'))
+                ],
+                motion_big_word_end: default_bindings![
+                    shift(KeyCode::Char('e')),
+                    plain(KeyCode::Char('E'))
+                ],
                 motion_line_start: default_bindings![plain(KeyCode::Char('0'))],
+                motion_first_non_blank: default_bindings![
+                    plain(KeyCode::Char('^')),
+                    shift(KeyCode::Char('^'))
+                ],
                 motion_line_end: default_bindings![
                     plain(KeyCode::Char('$')),
                     shift(KeyCode::Char('$'))
                 ],
+                motion_buffer_start: default_bindings![plain(KeyCode::Char('g'))],
+                motion_buffer_end: default_bindings![
+                    shift(KeyCode::Char('g')),
+                    plain(KeyCode::Char('G'))
+                ],
+                motion_find_forward: default_bindings![plain(KeyCode::Char('f'))],
+                motion_find_backward: default_bindings![
+                    shift(KeyCode::Char('f')),
+                    plain(KeyCode::Char('F'))
+                ],
+                motion_till_forward: default_bindings![plain(KeyCode::Char('t'))],
+                motion_till_backward: default_bindings![
+                    shift(KeyCode::Char('t')),
+                    plain(KeyCode::Char('T'))
+                ],
+                motion_repeat_find: default_bindings![plain(KeyCode::Char(';'))],
+                motion_repeat_find_reverse: default_bindings![plain(KeyCode::Char(','))],
                 select_inner_text_object: default_bindings![plain(KeyCode::Char('i'))],
                 select_around_text_object: default_bindings![plain(KeyCode::Char('a'))],
                 cancel: default_bindings![plain(KeyCode::Esc)],
@@ -1781,10 +2263,37 @@ impl RuntimeKeymap {
                 ),
                 ("move_word_end", self.vim_normal.move_word_end.as_slice()),
                 (
+                    "move_big_word_forward",
+                    self.vim_normal.move_big_word_forward.as_slice(),
+                ),
+                (
+                    "move_big_word_backward",
+                    self.vim_normal.move_big_word_backward.as_slice(),
+                ),
+                (
+                    "move_big_word_end",
+                    self.vim_normal.move_big_word_end.as_slice(),
+                ),
+                (
                     "move_line_start",
                     self.vim_normal.move_line_start.as_slice(),
                 ),
                 ("move_line_end", self.vim_normal.move_line_end.as_slice()),
+                (
+                    "move_first_non_blank",
+                    self.vim_normal.move_first_non_blank.as_slice(),
+                ),
+                (
+                    "move_buffer_start",
+                    self.vim_normal.move_buffer_start.as_slice(),
+                ),
+                (
+                    "move_buffer_end",
+                    self.vim_normal.move_buffer_end.as_slice(),
+                ),
+                ("undo", self.vim_normal.undo.as_slice()),
+                ("repeat_change", self.vim_normal.repeat_change.as_slice()),
+                ("replace_char", self.vim_normal.replace_char.as_slice()),
                 ("delete_char", self.vim_normal.delete_char.as_slice()),
                 (
                     "substitute_char",
@@ -1800,6 +2309,19 @@ impl RuntimeKeymap {
                 ),
                 ("yank_line", self.vim_normal.yank_line.as_slice()),
                 ("paste_after", self.vim_normal.paste_after.as_slice()),
+                ("paste_before", self.vim_normal.paste_before.as_slice()),
+                ("join_lines", self.vim_normal.join_lines.as_slice()),
+                ("indent_lines", self.vim_normal.indent_lines.as_slice()),
+                ("dedent_lines", self.vim_normal.dedent_lines.as_slice()),
+                ("find_forward", self.vim_normal.find_forward.as_slice()),
+                ("find_backward", self.vim_normal.find_backward.as_slice()),
+                ("till_forward", self.vim_normal.till_forward.as_slice()),
+                ("till_backward", self.vim_normal.till_backward.as_slice()),
+                ("repeat_find", self.vim_normal.repeat_find.as_slice()),
+                (
+                    "repeat_find_reverse",
+                    self.vim_normal.repeat_find_reverse.as_slice(),
+                ),
                 (
                     "start_delete_operator",
                     self.vim_normal.start_delete_operator.as_slice(),
@@ -1824,6 +2346,7 @@ impl RuntimeKeymap {
             [
                 ("delete_line", self.vim_operator.delete_line.as_slice()),
                 ("yank_line", self.vim_operator.yank_line.as_slice()),
+                ("change_line", self.vim_operator.change_line.as_slice()),
                 ("motion_left", self.vim_operator.motion_left.as_slice()),
                 ("motion_right", self.vim_operator.motion_right.as_slice()),
                 ("motion_up", self.vim_operator.motion_up.as_slice()),
@@ -1841,12 +2364,60 @@ impl RuntimeKeymap {
                     self.vim_operator.motion_word_end.as_slice(),
                 ),
                 (
+                    "motion_big_word_forward",
+                    self.vim_operator.motion_big_word_forward.as_slice(),
+                ),
+                (
+                    "motion_big_word_backward",
+                    self.vim_operator.motion_big_word_backward.as_slice(),
+                ),
+                (
+                    "motion_big_word_end",
+                    self.vim_operator.motion_big_word_end.as_slice(),
+                ),
+                (
                     "motion_line_start",
                     self.vim_operator.motion_line_start.as_slice(),
                 ),
                 (
                     "motion_line_end",
                     self.vim_operator.motion_line_end.as_slice(),
+                ),
+                (
+                    "motion_first_non_blank",
+                    self.vim_operator.motion_first_non_blank.as_slice(),
+                ),
+                (
+                    "motion_buffer_start",
+                    self.vim_operator.motion_buffer_start.as_slice(),
+                ),
+                (
+                    "motion_buffer_end",
+                    self.vim_operator.motion_buffer_end.as_slice(),
+                ),
+                (
+                    "motion_find_forward",
+                    self.vim_operator.motion_find_forward.as_slice(),
+                ),
+                (
+                    "motion_find_backward",
+                    self.vim_operator.motion_find_backward.as_slice(),
+                ),
+                (
+                    "motion_till_forward",
+                    self.vim_operator.motion_till_forward.as_slice(),
+                ),
+                (
+                    "motion_till_backward",
+                    self.vim_operator.motion_till_backward.as_slice(),
+                ),
+                (
+                    "motion_repeat_find",
+                    self.vim_operator.motion_repeat_find.as_slice(),
+                ),
+                (
+                    "motion_repeat_find_reverse",
+                    self.vim_operator.motion_repeat_find_reverse.as_slice(),
                 ),
                 (
                     "select_inner_text_object",
@@ -2040,8 +2611,12 @@ fn validate_unique<const N: usize>(
     let mut seen: HashMap<(KeyCode, KeyModifiers), &'static str> = HashMap::new();
     for (action, bindings) in pairs {
         for binding in bindings {
-            let key = binding.parts();
+            let (key, modifiers) = binding.parts();
+            let key = key_hint::normalize_key_parts(key, modifiers);
             if let Some(previous) = seen.insert(key, action) {
+                if previous == action {
+                    continue;
+                }
                 return Err(format!(
                     "Ambiguous `tui.keymap.{context}` bindings: `{previous}` and `{action}` use the same key. \
 Set unique keys in `~/.codex/config.toml` and retry. \
@@ -2218,6 +2793,27 @@ fn configured_bindings_to_preserve<const N: usize>(
         }
     }
     configured_bindings
+}
+
+fn contains_equivalent_binding(bindings: &[KeyBinding], candidate: &KeyBinding) -> bool {
+    let (candidate_key, candidate_modifiers) = candidate.parts();
+    let candidate = key_hint::normalize_key_parts(candidate_key, candidate_modifiers);
+    bindings.iter().any(|binding| {
+        let (key, modifiers) = binding.parts();
+        key_hint::normalize_key_parts(key, modifiers) == candidate
+    })
+}
+
+fn prune_new_defaults(
+    configured: Option<&KeybindingsSpec>,
+    bindings: &mut Vec<KeyBinding>,
+    configured_bindings_to_preserve: &[KeyBinding],
+) {
+    if configured.is_none() {
+        bindings.retain(|binding| {
+            !contains_equivalent_binding(configured_bindings_to_preserve, binding)
+        });
+    }
 }
 
 fn configured_main_surface_alias_is_used(keymap: &TuiKeymap, alias: &str) -> bool {
@@ -2807,6 +3403,41 @@ mod tests {
     }
 
     #[test]
+    fn configured_legacy_vim_normal_bindings_prune_new_jump_and_undo_defaults() {
+        let mut keymap = TuiKeymap::default();
+        keymap.vim_normal.move_left = Some(one("g"));
+        keymap.vim_normal.move_right = Some(one("shift-g"));
+        keymap.vim_normal.move_up = Some(one("u"));
+
+        let runtime = RuntimeKeymap::from_config(&keymap).expect("config should parse");
+
+        assert_eq!(runtime.vim_normal.move_buffer_start, Vec::new());
+        assert_eq!(runtime.vim_normal.move_buffer_end, Vec::new());
+        assert_eq!(runtime.vim_normal.undo, Vec::new());
+    }
+
+    #[test]
+    fn explicit_vim_buffer_start_binding_conflicts_with_legacy_binding() {
+        let mut keymap = TuiKeymap::default();
+        keymap.vim_normal.move_left = Some(one("g"));
+        keymap.vim_normal.move_buffer_start = Some(one("g"));
+
+        expect_conflict(&keymap, "move_left", "move_buffer_start");
+    }
+
+    #[test]
+    fn configured_legacy_vim_bindings_prune_new_command_defaults() {
+        let mut keymap = TuiKeymap::default();
+        keymap.vim_normal.move_left = Some(one("r"));
+        keymap.vim_operator.motion_left = Some(one("f"));
+
+        let runtime = RuntimeKeymap::from_config(&keymap).expect("config should parse");
+
+        assert_eq!(runtime.vim_normal.replace_char, Vec::new());
+        assert_eq!(runtime.vim_operator.motion_find_forward, Vec::new());
+    }
+
+    #[test]
     fn configured_legacy_vim_operator_bindings_prune_new_text_object_defaults() {
         let mut keymap = TuiKeymap::default();
         keymap.vim_operator.motion_left = Some(one("i"));
@@ -2836,6 +3467,25 @@ mod tests {
     }
 
     #[test]
+    fn configured_legacy_vim_operator_binding_prunes_change_line_default() {
+        let mut keymap = TuiKeymap::default();
+        keymap.vim_operator.motion_left = Some(one("c"));
+
+        let runtime = RuntimeKeymap::from_config(&keymap).expect("config should parse");
+
+        assert_eq!(runtime.vim_operator.change_line, Vec::new());
+    }
+
+    #[test]
+    fn explicit_change_line_binding_conflicts_with_legacy_binding() {
+        let mut keymap = TuiKeymap::default();
+        keymap.vim_operator.motion_left = Some(one("c"));
+        keymap.vim_operator.change_line = Some(one("c"));
+
+        expect_conflict(&keymap, "motion_left", "change_line");
+    }
+
+    #[test]
     fn vim_normal_defaults_include_insert_and_arrow_aliases() {
         let runtime = RuntimeKeymap::defaults();
 
@@ -2857,7 +3507,8 @@ mod tests {
             runtime.vim_normal.move_right,
             vec![
                 key_hint::plain(KeyCode::Char('l')),
-                key_hint::plain(KeyCode::Right)
+                key_hint::plain(KeyCode::Right),
+                key_hint::plain(KeyCode::Char(' '))
             ]
         );
         assert_eq!(

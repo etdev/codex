@@ -225,10 +225,28 @@ pub struct TuiVimNormalKeymap {
     pub move_word_backward: Option<KeybindingsSpec>,
     /// Move cursor to end of current/next word (`e`).
     pub move_word_end: Option<KeybindingsSpec>,
+    /// Move cursor to start of next whitespace-delimited WORD (`W`).
+    pub move_big_word_forward: Option<KeybindingsSpec>,
+    /// Move cursor to start of previous whitespace-delimited WORD (`B`).
+    pub move_big_word_backward: Option<KeybindingsSpec>,
+    /// Move cursor to end of current/next whitespace-delimited WORD (`E`).
+    pub move_big_word_end: Option<KeybindingsSpec>,
     /// Move cursor to start of line (`0`).
     pub move_line_start: Option<KeybindingsSpec>,
+    /// Move cursor to first non-blank character of line (`^`).
+    pub move_first_non_blank: Option<KeybindingsSpec>,
     /// Move cursor to end of line (`$`).
     pub move_line_end: Option<KeybindingsSpec>,
+    /// Move cursor to first non-blank of first line (`gg`). Press the binding twice.
+    pub move_buffer_start: Option<KeybindingsSpec>,
+    /// Move cursor to first non-blank of last line (`G`).
+    pub move_buffer_end: Option<KeybindingsSpec>,
+    /// Undo the most recent Vim edit (`u`).
+    pub undo: Option<KeybindingsSpec>,
+    /// Repeat the most recent Vim edit (`.`).
+    pub repeat_change: Option<KeybindingsSpec>,
+    /// Replace the character under the cursor (`r{char}`).
+    pub replace_char: Option<KeybindingsSpec>,
     /// Delete character under cursor (`x`).
     pub delete_char: Option<KeybindingsSpec>,
     /// Delete character under cursor and enter insert mode (`s`).
@@ -241,11 +259,31 @@ pub struct TuiVimNormalKeymap {
     pub yank_line: Option<KeybindingsSpec>,
     /// Paste after cursor (`p`).
     pub paste_after: Option<KeybindingsSpec>,
+    /// Paste before cursor (`P`).
+    pub paste_before: Option<KeybindingsSpec>,
+    /// Join the current line with the following line (`J`).
+    pub join_lines: Option<KeybindingsSpec>,
+    /// Indent lines (`>>`). Press the binding twice.
+    pub indent_lines: Option<KeybindingsSpec>,
+    /// Dedent lines (`<<`). Press the binding twice.
+    pub dedent_lines: Option<KeybindingsSpec>,
+    /// Find a character forward on the current line (`f{char}`).
+    pub find_forward: Option<KeybindingsSpec>,
+    /// Find a character backward on the current line (`F{char}`).
+    pub find_backward: Option<KeybindingsSpec>,
+    /// Move until before a character forward on the current line (`t{char}`).
+    pub till_forward: Option<KeybindingsSpec>,
+    /// Move until after a character backward on the current line (`T{char}`).
+    pub till_backward: Option<KeybindingsSpec>,
+    /// Repeat the most recent character find (`;`).
+    pub repeat_find: Option<KeybindingsSpec>,
+    /// Repeat the most recent character find in the opposite direction (`,`).
+    pub repeat_find_reverse: Option<KeybindingsSpec>,
     /// Begin delete operator; next key selects motion (`d`).
     pub start_delete_operator: Option<KeybindingsSpec>,
     /// Begin yank operator; next key selects motion (`y`).
     pub start_yank_operator: Option<KeybindingsSpec>,
-    /// Begin change operator; next keys select a text object.
+    /// Begin change operator; next keys select a motion or text object.
     pub start_change_operator: Option<KeybindingsSpec>,
     /// Cancel a pending operator and return to normal mode.
     pub cancel_operator: Option<KeybindingsSpec>,
@@ -253,8 +291,8 @@ pub struct TuiVimNormalKeymap {
 
 /// Vim operator-pending keybindings for modal editing inside text areas.
 ///
-/// This context is active only while waiting for a motion after `d` or `y`.
-/// Repeating the operator key (`dd`, `yy`) targets the entire line. Pressing
+/// This context is active only while waiting for a motion after `d`, `y`, or `c`.
+/// Repeating the operator key (`dd`, `yy`, `cc`) targets the entire line. Pressing
 /// `Esc` cancels the pending operator and returns to normal mode without
 /// modifying text.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default, JsonSchema)]
@@ -264,6 +302,8 @@ pub struct TuiVimOperatorKeymap {
     pub delete_line: Option<KeybindingsSpec>,
     /// Repeat yank operator to yank the whole line (`yy`).
     pub yank_line: Option<KeybindingsSpec>,
+    /// Repeat change operator to change the whole line (`cc`).
+    pub change_line: Option<KeybindingsSpec>,
     /// Motion: left (`h`).
     pub motion_left: Option<KeybindingsSpec>,
     /// Motion: right (`l`).
@@ -278,10 +318,34 @@ pub struct TuiVimOperatorKeymap {
     pub motion_word_backward: Option<KeybindingsSpec>,
     /// Motion: to end of current/next word (`e`).
     pub motion_word_end: Option<KeybindingsSpec>,
+    /// Motion: to start of next whitespace-delimited WORD (`W`).
+    pub motion_big_word_forward: Option<KeybindingsSpec>,
+    /// Motion: to start of previous whitespace-delimited WORD (`B`).
+    pub motion_big_word_backward: Option<KeybindingsSpec>,
+    /// Motion: to end of current/next whitespace-delimited WORD (`E`).
+    pub motion_big_word_end: Option<KeybindingsSpec>,
     /// Motion: to start of line (`0`).
     pub motion_line_start: Option<KeybindingsSpec>,
+    /// Motion: to first non-blank character of line (`^`).
+    pub motion_first_non_blank: Option<KeybindingsSpec>,
     /// Motion: to end of line (`$`).
     pub motion_line_end: Option<KeybindingsSpec>,
+    /// Motion: to first line (`gg`). Press the binding twice.
+    pub motion_buffer_start: Option<KeybindingsSpec>,
+    /// Motion: to last line (`G`).
+    pub motion_buffer_end: Option<KeybindingsSpec>,
+    /// Motion: find a character forward (`f{char}`).
+    pub motion_find_forward: Option<KeybindingsSpec>,
+    /// Motion: find a character backward (`F{char}`).
+    pub motion_find_backward: Option<KeybindingsSpec>,
+    /// Motion: until before a character forward (`t{char}`).
+    pub motion_till_forward: Option<KeybindingsSpec>,
+    /// Motion: until after a character backward (`T{char}`).
+    pub motion_till_backward: Option<KeybindingsSpec>,
+    /// Motion: repeat the most recent character find (`;`).
+    pub motion_repeat_find: Option<KeybindingsSpec>,
+    /// Motion: repeat the most recent character find in reverse (`,`).
+    pub motion_repeat_find_reverse: Option<KeybindingsSpec>,
     /// Select an inner text object after an operator.
     pub select_inner_text_object: Option<KeybindingsSpec>,
     /// Select an around text object after an operator.

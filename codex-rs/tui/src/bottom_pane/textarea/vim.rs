@@ -1,8 +1,18 @@
 use super::TextArea;
 use super::split_word_pieces;
 use crate::key_hint::KeyBindingListExt;
+use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
+use crossterm::event::KeyModifiers;
+use std::collections::VecDeque;
 use std::ops::Range;
+
+const VIM_UNDO_LIMIT: usize = 100;
+
+/// Bounds counts so a long digit run cannot freeze the composer or exhaust
+/// memory. Counts scale loop iterations and `repeat` allocations, and a
+/// composer draft is never long enough to address more than this.
+pub(super) const VIM_MAX_COUNT: usize = 1_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum VimMode {
@@ -22,11 +32,77 @@ pub(super) enum VimOperator {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum VimPending {
     None,
-    Operator(VimOperator),
+    BufferStart {
+        operator: Option<VimOperator>,
+        count: Option<usize>,
+    },
+    Operator {
+        operator: VimOperator,
+        operator_count: Option<usize>,
+        motion_count: Option<usize>,
+    },
     TextObject {
         operator: VimOperator,
         scope: VimTextObjectScope,
+        count: usize,
     },
+    Find {
+        operator: Option<VimOperator>,
+        kind: VimFindKind,
+        count: usize,
+    },
+    ReplaceChar {
+        count: usize,
+    },
+    Indent {
+        direction: VimIndentDirection,
+        count: usize,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum VimRangeKind {
+    Characterwise,
+    Linewise,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct VimOperatorRange {
+    pub(super) range: Range<usize>,
+    pub(super) kind: VimRangeKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct VimUndoSnapshot {
+    text: String,
+    cursor_pos: usize,
+    elements: Vec<super::TextElement>,
+}
+
+#[derive(Debug, Default)]
+pub(super) struct VimUndoState {
+    history: VecDeque<VimUndoSnapshot>,
+    active: Option<VimUndoSnapshot>,
+}
+
+/// A key captured for dot-repeat, tagged if it was consumed as a count digit.
+///
+/// Rescanning for digits later cannot recover the tag, since a digit may be an
+/// argument instead, as in `r2`.
+#[derive(Debug, Clone, Copy)]
+struct VimRecordedKey {
+    event: KeyEvent,
+    is_count: bool,
+}
+
+#[derive(Debug, Default)]
+pub(super) struct VimCommandState {
+    pub(super) count: Option<usize>,
+    pub(super) last_find: Option<VimFind>,
+    pending_keys: Vec<VimRecordedKey>,
+    recording: Option<Vec<VimRecordedKey>>,
+    last_change: Vec<VimRecordedKey>,
+    replaying: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,8 +114,44 @@ pub(super) enum VimMotion {
     WordForward,
     WordBackward,
     WordEnd,
+    BigWordForward,
+    BigWordBackward,
+    BigWordEnd,
     LineStart,
+    FirstNonBlank,
     LineEnd,
+    Find(VimFind),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum VimFindKind {
+    Forward,
+    Backward,
+    TillForward,
+    TillBackward,
+}
+
+impl VimFindKind {
+    pub(super) const fn reversed(self) -> Self {
+        match self {
+            Self::Forward => Self::Backward,
+            Self::Backward => Self::Forward,
+            Self::TillForward => Self::TillBackward,
+            Self::TillBackward => Self::TillForward,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct VimFind {
+    pub(super) kind: VimFindKind,
+    pub(super) target: char,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum VimIndentDirection {
+    Increase,
+    Decrease,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,6 +173,156 @@ pub(super) enum VimTextObject {
 }
 
 impl TextArea {
+    pub(super) fn clear_vim_command_state(&mut self) {
+        self.vim_command = VimCommandState::default();
+        self.vim_pending = VimPending::None;
+    }
+
+    pub(super) fn begin_vim_key(&mut self, event: KeyEvent) {
+        if self.vim_command.replaying {
+            return;
+        }
+        let key = VimRecordedKey {
+            event,
+            is_count: false,
+        };
+        if let Some(recording) = self.vim_command.recording.as_mut() {
+            recording.push(key);
+        } else {
+            self.vim_command.pending_keys.push(key);
+        }
+    }
+
+    /// Tag the most recently recorded key as a count digit.
+    pub(super) fn mark_vim_key_as_count(&mut self) {
+        if self.vim_command.replaying {
+            return;
+        }
+        let keys = self
+            .vim_command
+            .recording
+            .as_mut()
+            .unwrap_or(&mut self.vim_command.pending_keys);
+        if let Some(key) = keys.last_mut() {
+            key.is_count = true;
+        }
+    }
+
+    pub(super) fn finish_vim_key(&mut self) {
+        if self.vim_command.replaying
+            || self.vim_command.recording.is_some()
+            || self.vim_mode != VimMode::Normal
+            || !matches!(self.vim_pending, VimPending::None)
+            || self.vim_command.count.is_some()
+        {
+            return;
+        }
+        self.vim_command.pending_keys.clear();
+    }
+
+    fn begin_vim_change_recording(&mut self) {
+        if self.vim_command.replaying || self.vim_command.recording.is_some() {
+            return;
+        }
+        self.vim_command.recording = Some(std::mem::take(&mut self.vim_command.pending_keys));
+    }
+
+    fn finish_vim_change_recording(&mut self, changed: bool) {
+        let Some(recording) = self.vim_command.recording.take() else {
+            return;
+        };
+        if changed && !self.vim_command.replaying && !recording.is_empty() {
+            self.vim_command.last_change = recording;
+        }
+        self.vim_command.pending_keys.clear();
+    }
+
+    pub(super) fn repeat_last_vim_change(&mut self, count: Option<usize>) {
+        let keys = self.vim_command.last_change.clone();
+        if keys.is_empty() {
+            return;
+        }
+        // Vim's `.` substitutes its count for the recorded one, so `2x` then
+        // `3.` deletes three characters, not six. With no recorded count there
+        // is nothing to substitute into, so repeat instead; that keeps insert
+        // sessions, which ignore counts, correct.
+        let (events, repeats) = match count {
+            Some(count) if keys.iter().any(|key| key.is_count) => {
+                (replace_recorded_vim_count(&keys, count), 1)
+            }
+            Some(count) => (recorded_vim_events(&keys), count),
+            None => (recorded_vim_events(&keys), 1),
+        };
+        self.vim_command.pending_keys.clear();
+        self.vim_command.replaying = true;
+        for _ in 0..repeats {
+            for event in &events {
+                self.input(*event);
+            }
+        }
+        self.vim_command.replaying = false;
+    }
+
+    pub(super) fn push_vim_count_digit(count: &mut Option<usize>, digit: u8) {
+        let next = count
+            .unwrap_or(0)
+            .saturating_mul(10)
+            .saturating_add(usize::from(digit));
+        *count = Some(next.clamp(1, VIM_MAX_COUNT));
+    }
+
+    pub(super) fn clear_vim_undo(&mut self) {
+        self.vim_undo = VimUndoState::default();
+    }
+
+    pub(super) fn begin_vim_text_change(&mut self) {
+        if !self.vim_enabled || self.vim_undo.active.is_some() {
+            return;
+        }
+        self.vim_undo.active = Some(VimUndoSnapshot {
+            text: self.text.clone(),
+            cursor_pos: self.cursor_pos,
+            elements: self.elements.clone(),
+        });
+        self.begin_vim_change_recording();
+    }
+
+    pub(super) fn finish_vim_text_change(&mut self) {
+        if self.vim_enabled && self.vim_mode == VimMode::Normal {
+            self.commit_vim_undo_session();
+        }
+    }
+
+    pub(super) fn commit_vim_undo_session(&mut self) {
+        let Some(snapshot) = self.vim_undo.active.take() else {
+            return;
+        };
+        let changed = snapshot.text != self.text || snapshot.elements != self.elements;
+        if !changed {
+            self.finish_vim_change_recording(/*changed*/ false);
+            return;
+        }
+        if self.vim_undo.history.len() == VIM_UNDO_LIMIT {
+            self.vim_undo.history.pop_front();
+        }
+        self.vim_undo.history.push_back(snapshot);
+        self.finish_vim_change_recording(/*changed*/ true);
+    }
+
+    pub(super) fn undo_vim_edit(&mut self) {
+        let Some(snapshot) = self.vim_undo.history.pop_back() else {
+            return;
+        };
+        self.text = snapshot.text;
+        self.cursor_pos = snapshot.cursor_pos;
+        self.elements = snapshot.elements;
+        self.vim_undo.active = None;
+        self.vim_mode = VimMode::Normal;
+        self.vim_pending = VimPending::None;
+        self.wrap_cache.replace(None);
+        self.preferred_col = None;
+    }
+
     pub(super) fn vim_text_object_scope_for_event(
         &self,
         event: KeyEvent,
@@ -149,7 +411,7 @@ impl TextArea {
             .find(|range| self.cursor_overlaps_range(range) || self.cursor_is_at_range_end(range))
     }
 
-    fn small_word_range_at_cursor(&self) -> Option<Range<usize>> {
+    pub(super) fn small_word_range_at_cursor(&self) -> Option<Range<usize>> {
         for run in self.non_ws_runs() {
             if !self.cursor_overlaps_range(&run) && !self.cursor_is_at_range_end(&run) {
                 continue;
@@ -297,7 +559,7 @@ impl TextArea {
         best
     }
 
-    fn is_inside_element(&self, pos: usize) -> bool {
+    pub(super) fn is_inside_element(&self, pos: usize) -> bool {
         self.elements
             .iter()
             .any(|element| pos >= element.range.start && pos < element.range.end)
@@ -317,4 +579,31 @@ impl TextArea {
 
 fn idx_range(open_idx: usize, close_idx: usize, quote: char) -> Range<usize> {
     open_idx..close_idx + quote.len_utf8()
+}
+
+fn recorded_vim_events(keys: &[VimRecordedKey]) -> Vec<KeyEvent> {
+    keys.iter().map(|key| key.event).collect()
+}
+
+/// Rewrite `keys` so the count it carries becomes `count`.
+///
+/// The first digit run is replaced in place, so `d2w` repeats as `d3w`. Later
+/// count digits are dropped, collapsing the rare `2d3w` onto one count.
+fn replace_recorded_vim_count(keys: &[VimRecordedKey], count: usize) -> Vec<KeyEvent> {
+    let mut events = Vec::with_capacity(keys.len());
+    let mut replaced = false;
+    for key in keys {
+        if !key.is_count {
+            events.push(key.event);
+        } else if !replaced {
+            replaced = true;
+            events.extend(
+                count
+                    .to_string()
+                    .chars()
+                    .map(|ch| KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE)),
+            );
+        }
+    }
+    events
 }

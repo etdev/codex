@@ -117,8 +117,10 @@ fn allows_shared_prefixes_with_distinct_completions() {
 #[test]
 fn allows_plain_prefixes_in_vim_and_repeated_chords_in_all_contexts() {
     let mut config = TuiKeymap::default();
-    config.vim_normal.move_line_start = Some(binding("g g"));
-    config.vim_operator.motion_line_start = Some(binding("g g"));
+    // `g` is taken by `move_buffer_start`/`motion_buffer_start`, so use an unbound
+    // printable key to exercise the plain-prefix rule without hitting the shadow check.
+    config.vim_normal.move_line_start = Some(binding("z z"));
+    config.vim_operator.motion_line_start = Some(binding("z z"));
     config.global.open_transcript = Some(binding("ctrl-t ctrl-t"));
 
     RuntimeKeymap::from_config(&config)

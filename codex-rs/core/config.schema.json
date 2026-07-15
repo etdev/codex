@@ -3601,11 +3601,22 @@
               "append_line_end": null,
               "cancel_operator": null,
               "change_to_line_end": null,
+              "dedent_lines": null,
               "delete_char": null,
               "delete_to_line_end": null,
               "enter_insert": null,
+              "find_backward": null,
+              "find_forward": null,
+              "indent_lines": null,
               "insert_line_start": null,
+              "join_lines": null,
+              "move_big_word_backward": null,
+              "move_big_word_end": null,
+              "move_big_word_forward": null,
+              "move_buffer_end": null,
+              "move_buffer_start": null,
               "move_down": null,
+              "move_first_non_blank": null,
               "move_left": null,
               "move_line_end": null,
               "move_line_start": null,
@@ -3617,20 +3628,41 @@
               "open_line_above": null,
               "open_line_below": null,
               "paste_after": null,
+              "paste_before": null,
+              "repeat_change": null,
+              "repeat_find": null,
+              "repeat_find_reverse": null,
+              "replace_char": null,
               "start_change_operator": null,
               "start_delete_operator": null,
               "start_yank_operator": null,
               "substitute_char": null,
+              "till_backward": null,
+              "till_forward": null,
+              "undo": null,
               "yank_line": null
             },
             "vim_operator": {
               "cancel": null,
+              "change_line": null,
               "delete_line": null,
+              "motion_big_word_backward": null,
+              "motion_big_word_end": null,
+              "motion_big_word_forward": null,
+              "motion_buffer_end": null,
+              "motion_buffer_start": null,
               "motion_down": null,
+              "motion_find_backward": null,
+              "motion_find_forward": null,
+              "motion_first_non_blank": null,
               "motion_left": null,
               "motion_line_end": null,
               "motion_line_start": null,
+              "motion_repeat_find": null,
+              "motion_repeat_find_reverse": null,
               "motion_right": null,
+              "motion_till_backward": null,
+              "motion_till_forward": null,
               "motion_up": null,
               "motion_word_backward": null,
               "motion_word_end": null,
@@ -4380,11 +4412,22 @@
             "append_line_end": null,
             "cancel_operator": null,
             "change_to_line_end": null,
+            "dedent_lines": null,
             "delete_char": null,
             "delete_to_line_end": null,
             "enter_insert": null,
+            "find_backward": null,
+            "find_forward": null,
+            "indent_lines": null,
             "insert_line_start": null,
+            "join_lines": null,
+            "move_big_word_backward": null,
+            "move_big_word_end": null,
+            "move_big_word_forward": null,
+            "move_buffer_end": null,
+            "move_buffer_start": null,
             "move_down": null,
+            "move_first_non_blank": null,
             "move_left": null,
             "move_line_end": null,
             "move_line_start": null,
@@ -4396,10 +4439,18 @@
             "open_line_above": null,
             "open_line_below": null,
             "paste_after": null,
+            "paste_before": null,
+            "repeat_change": null,
+            "repeat_find": null,
+            "repeat_find_reverse": null,
+            "replace_char": null,
             "start_change_operator": null,
             "start_delete_operator": null,
             "start_yank_operator": null,
             "substitute_char": null,
+            "till_backward": null,
+            "till_forward": null,
+            "undo": null,
             "yank_line": null
           }
         },
@@ -4411,12 +4462,25 @@
           ],
           "default": {
             "cancel": null,
+            "change_line": null,
             "delete_line": null,
+            "motion_big_word_backward": null,
+            "motion_big_word_end": null,
+            "motion_big_word_forward": null,
+            "motion_buffer_end": null,
+            "motion_buffer_start": null,
             "motion_down": null,
+            "motion_find_backward": null,
+            "motion_find_forward": null,
+            "motion_first_non_blank": null,
             "motion_left": null,
             "motion_line_end": null,
             "motion_line_start": null,
+            "motion_repeat_find": null,
+            "motion_repeat_find_reverse": null,
             "motion_right": null,
+            "motion_till_backward": null,
+            "motion_till_forward": null,
             "motion_up": null,
             "motion_word_backward": null,
             "motion_word_end": null,
@@ -4675,6 +4739,14 @@
           ],
           "description": "Change from cursor to end of line and enter insert mode (`C`)."
         },
+        "dedent_lines": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Dedent lines (`<<`). Press the binding twice."
+        },
         "delete_char": {
           "allOf": [
             {
@@ -4699,6 +4771,30 @@
           ],
           "description": "Enter insert mode at cursor (`i`)."
         },
+        "find_backward": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Find a character backward on the current line (`F{char}`)."
+        },
+        "find_forward": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Find a character forward on the current line (`f{char}`)."
+        },
+        "indent_lines": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Indent lines (`>>`). Press the binding twice."
+        },
         "insert_line_start": {
           "allOf": [
             {
@@ -4707,6 +4803,54 @@
           ],
           "description": "Enter insert mode at first non-blank of line (`I`)."
         },
+        "join_lines": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Join the current line with the following line (`J`)."
+        },
+        "move_big_word_backward": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Move cursor to start of previous whitespace-delimited WORD (`B`)."
+        },
+        "move_big_word_end": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Move cursor to end of current/next whitespace-delimited WORD (`E`)."
+        },
+        "move_big_word_forward": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Move cursor to start of next whitespace-delimited WORD (`W`)."
+        },
+        "move_buffer_end": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Move cursor to first non-blank of last line (`G`)."
+        },
+        "move_buffer_start": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Move cursor to first non-blank of first line (`gg`). Press the binding twice."
+        },
         "move_down": {
           "allOf": [
             {
@@ -4714,6 +4858,14 @@
             }
           ],
           "description": "Move cursor down (`j`), or recall newer composer history at history boundaries."
+        },
+        "move_first_non_blank": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Move cursor to first non-blank character of line (`^`)."
         },
         "move_left": {
           "allOf": [
@@ -4803,13 +4955,53 @@
           ],
           "description": "Paste after cursor (`p`)."
         },
+        "paste_before": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Paste before cursor (`P`)."
+        },
+        "repeat_change": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Repeat the most recent Vim edit (`.`)."
+        },
+        "repeat_find": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Repeat the most recent character find (`;`)."
+        },
+        "repeat_find_reverse": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Repeat the most recent character find in the opposite direction (`,`)."
+        },
+        "replace_char": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Replace the character under the cursor (`r{char}`)."
+        },
         "start_change_operator": {
           "allOf": [
             {
               "$ref": "#/definitions/KeybindingsSpec"
             }
           ],
-          "description": "Begin change operator; next keys select a text object."
+          "description": "Begin change operator; next keys select a motion or text object."
         },
         "start_delete_operator": {
           "allOf": [
@@ -4835,6 +5027,30 @@
           ],
           "description": "Delete character under cursor and enter insert mode (`s`)."
         },
+        "till_backward": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Move until after a character backward on the current line (`T{char}`)."
+        },
+        "till_forward": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Move until before a character forward on the current line (`t{char}`)."
+        },
+        "undo": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Undo the most recent Vim edit (`u`)."
+        },
         "yank_line": {
           "allOf": [
             {
@@ -4848,7 +5064,7 @@
     },
     "TuiVimOperatorKeymap": {
       "additionalProperties": false,
-      "description": "Vim operator-pending keybindings for modal editing inside text areas.\n\nThis context is active only while waiting for a motion after `d` or `y`. Repeating the operator key (`dd`, `yy`) targets the entire line. Pressing `Esc` cancels the pending operator and returns to normal mode without modifying text.",
+      "description": "Vim operator-pending keybindings for modal editing inside text areas.\n\nThis context is active only while waiting for a motion after `d`, `y`, or `c`. Repeating the operator key (`dd`, `yy`, `cc`) targets the entire line. Pressing `Esc` cancels the pending operator and returns to normal mode without modifying text.",
       "properties": {
         "cancel": {
           "allOf": [
@@ -4858,6 +5074,14 @@
           ],
           "description": "Cancel the pending operator and return to normal mode."
         },
+        "change_line": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Repeat change operator to change the whole line (`cc`)."
+        },
         "delete_line": {
           "allOf": [
             {
@@ -4866,6 +5090,46 @@
           ],
           "description": "Repeat delete operator to delete the whole line (`dd`)."
         },
+        "motion_big_word_backward": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Motion: to start of previous whitespace-delimited WORD (`B`)."
+        },
+        "motion_big_word_end": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Motion: to end of current/next whitespace-delimited WORD (`E`)."
+        },
+        "motion_big_word_forward": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Motion: to start of next whitespace-delimited WORD (`W`)."
+        },
+        "motion_buffer_end": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Motion: to last line (`G`)."
+        },
+        "motion_buffer_start": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Motion: to first line (`gg`). Press the binding twice."
+        },
         "motion_down": {
           "allOf": [
             {
@@ -4873,6 +5137,30 @@
             }
           ],
           "description": "Motion: down one line (`j`)."
+        },
+        "motion_find_backward": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Motion: find a character backward (`F{char}`)."
+        },
+        "motion_find_forward": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Motion: find a character forward (`f{char}`)."
+        },
+        "motion_first_non_blank": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Motion: to first non-blank character of line (`^`)."
         },
         "motion_left": {
           "allOf": [
@@ -4898,6 +5186,22 @@
           ],
           "description": "Motion: to start of line (`0`)."
         },
+        "motion_repeat_find": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Motion: repeat the most recent character find (`;`)."
+        },
+        "motion_repeat_find_reverse": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Motion: repeat the most recent character find in reverse (`,`)."
+        },
         "motion_right": {
           "allOf": [
             {
@@ -4905,6 +5209,22 @@
             }
           ],
           "description": "Motion: right (`l`)."
+        },
+        "motion_till_backward": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Motion: until after a character backward (`T{char}`)."
+        },
+        "motion_till_forward": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Motion: until before a character forward (`t{char}`)."
         },
         "motion_up": {
           "allOf": [
