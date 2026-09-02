@@ -192,12 +192,18 @@ pub(crate) struct VimNormalKeymap {
     pub(crate) move_word_forward: Vec<KeyBinding>,
     pub(crate) move_word_backward: Vec<KeyBinding>,
     pub(crate) move_word_end: Vec<KeyBinding>,
+    pub(crate) move_big_word_forward: Vec<KeyBinding>,
+    pub(crate) move_big_word_backward: Vec<KeyBinding>,
+    pub(crate) move_big_word_end: Vec<KeyBinding>,
     pub(crate) move_line_start: Vec<KeyBinding>,
+    pub(crate) move_first_non_blank: Vec<KeyBinding>,
     pub(crate) move_line_end: Vec<KeyBinding>,
     pub(crate) find_forward: Vec<KeyBinding>,
     pub(crate) find_backward: Vec<KeyBinding>,
     pub(crate) till_forward: Vec<KeyBinding>,
     pub(crate) till_backward: Vec<KeyBinding>,
+    pub(crate) repeat_find: Vec<KeyBinding>,
+    pub(crate) repeat_find_reverse: Vec<KeyBinding>,
     pub(crate) jump_top: Vec<KeyBinding>,
     pub(crate) jump_bottom: Vec<KeyBinding>,
     pub(crate) delete_char: Vec<KeyBinding>,
@@ -208,6 +214,10 @@ pub(crate) struct VimNormalKeymap {
     pub(crate) change_to_line_end: Vec<KeyBinding>,
     pub(crate) yank_line: Vec<KeyBinding>,
     pub(crate) paste_after: Vec<KeyBinding>,
+    pub(crate) paste_before: Vec<KeyBinding>,
+    pub(crate) join_lines: Vec<KeyBinding>,
+    pub(crate) indent_lines: Vec<KeyBinding>,
+    pub(crate) dedent_lines: Vec<KeyBinding>,
     pub(crate) start_delete_operator: Vec<KeyBinding>,
     pub(crate) start_yank_operator: Vec<KeyBinding>,
     pub(crate) start_change_operator: Vec<KeyBinding>,
@@ -233,12 +243,18 @@ pub(crate) struct VimOperatorKeymap {
     pub(crate) motion_word_forward: Vec<KeyBinding>,
     pub(crate) motion_word_backward: Vec<KeyBinding>,
     pub(crate) motion_word_end: Vec<KeyBinding>,
+    pub(crate) motion_big_word_forward: Vec<KeyBinding>,
+    pub(crate) motion_big_word_backward: Vec<KeyBinding>,
+    pub(crate) motion_big_word_end: Vec<KeyBinding>,
     pub(crate) motion_line_start: Vec<KeyBinding>,
+    pub(crate) motion_first_non_blank: Vec<KeyBinding>,
     pub(crate) motion_line_end: Vec<KeyBinding>,
     pub(crate) motion_find_forward: Vec<KeyBinding>,
     pub(crate) motion_find_backward: Vec<KeyBinding>,
     pub(crate) motion_till_forward: Vec<KeyBinding>,
     pub(crate) motion_till_backward: Vec<KeyBinding>,
+    pub(crate) motion_repeat_find: Vec<KeyBinding>,
+    pub(crate) motion_repeat_find_reverse: Vec<KeyBinding>,
     pub(crate) motion_jump_top: Vec<KeyBinding>,
     pub(crate) motion_jump_bottom: Vec<KeyBinding>,
     pub(crate) select_inner_text_object: Vec<KeyBinding>,
@@ -732,12 +748,33 @@ impl RuntimeKeymap {
             move_word_forward: resolve_local!(keymap, defaults, vim_normal, move_word_forward),
             move_word_backward: resolve_local!(keymap, defaults, vim_normal, move_word_backward),
             move_word_end: resolve_local!(keymap, defaults, vim_normal, move_word_end),
+            move_big_word_forward: resolve_local!(
+                keymap,
+                defaults,
+                vim_normal,
+                move_big_word_forward
+            ),
+            move_big_word_backward: resolve_local!(
+                keymap,
+                defaults,
+                vim_normal,
+                move_big_word_backward
+            ),
+            move_big_word_end: resolve_local!(keymap, defaults, vim_normal, move_big_word_end),
             move_line_start: resolve_local!(keymap, defaults, vim_normal, move_line_start),
+            move_first_non_blank: resolve_local!(
+                keymap,
+                defaults,
+                vim_normal,
+                move_first_non_blank
+            ),
             move_line_end: resolve_local!(keymap, defaults, vim_normal, move_line_end),
             find_forward: resolve_local!(keymap, defaults, vim_normal, find_forward),
             find_backward: resolve_local!(keymap, defaults, vim_normal, find_backward),
             till_forward: resolve_local!(keymap, defaults, vim_normal, till_forward),
             till_backward: resolve_local!(keymap, defaults, vim_normal, till_backward),
+            repeat_find: resolve_local!(keymap, defaults, vim_normal, repeat_find),
+            repeat_find_reverse: resolve_local!(keymap, defaults, vim_normal, repeat_find_reverse),
             jump_top: resolve_local!(keymap, defaults, vim_normal, jump_top),
             jump_bottom: resolve_local!(keymap, defaults, vim_normal, jump_bottom),
             delete_char: resolve_local!(keymap, defaults, vim_normal, delete_char),
@@ -748,6 +785,10 @@ impl RuntimeKeymap {
             change_to_line_end: resolve_local!(keymap, defaults, vim_normal, change_to_line_end),
             yank_line: resolve_local!(keymap, defaults, vim_normal, yank_line),
             paste_after: resolve_local!(keymap, defaults, vim_normal, paste_after),
+            paste_before: resolve_local!(keymap, defaults, vim_normal, paste_before),
+            join_lines: resolve_local!(keymap, defaults, vim_normal, join_lines),
+            indent_lines: resolve_local!(keymap, defaults, vim_normal, indent_lines),
+            dedent_lines: resolve_local!(keymap, defaults, vim_normal, dedent_lines),
             start_delete_operator: resolve_local!(
                 keymap,
                 defaults,
@@ -830,6 +871,46 @@ impl RuntimeKeymap {
             (
                 keymap.vim_normal.move_line_end.as_ref(),
                 vim_normal.move_line_end.as_slice(),
+            ),
+            (
+                keymap.vim_normal.move_big_word_forward.as_ref(),
+                vim_normal.move_big_word_forward.as_slice(),
+            ),
+            (
+                keymap.vim_normal.move_big_word_backward.as_ref(),
+                vim_normal.move_big_word_backward.as_slice(),
+            ),
+            (
+                keymap.vim_normal.move_big_word_end.as_ref(),
+                vim_normal.move_big_word_end.as_slice(),
+            ),
+            (
+                keymap.vim_normal.move_first_non_blank.as_ref(),
+                vim_normal.move_first_non_blank.as_slice(),
+            ),
+            (
+                keymap.vim_normal.repeat_find.as_ref(),
+                vim_normal.repeat_find.as_slice(),
+            ),
+            (
+                keymap.vim_normal.repeat_find_reverse.as_ref(),
+                vim_normal.repeat_find_reverse.as_slice(),
+            ),
+            (
+                keymap.vim_normal.paste_before.as_ref(),
+                vim_normal.paste_before.as_slice(),
+            ),
+            (
+                keymap.vim_normal.join_lines.as_ref(),
+                vim_normal.join_lines.as_slice(),
+            ),
+            (
+                keymap.vim_normal.indent_lines.as_ref(),
+                vim_normal.indent_lines.as_slice(),
+            ),
+            (
+                keymap.vim_normal.dedent_lines.as_ref(),
+                vim_normal.dedent_lines.as_slice(),
             ),
             (
                 keymap.vim_normal.find_forward.as_ref(),
@@ -960,6 +1041,46 @@ impl RuntimeKeymap {
                 keymap.vim_normal.jump_bottom.as_ref(),
                 &mut vim_normal.jump_bottom,
             ),
+            (
+                keymap.vim_normal.move_big_word_forward.as_ref(),
+                &mut vim_normal.move_big_word_forward,
+            ),
+            (
+                keymap.vim_normal.move_big_word_backward.as_ref(),
+                &mut vim_normal.move_big_word_backward,
+            ),
+            (
+                keymap.vim_normal.move_big_word_end.as_ref(),
+                &mut vim_normal.move_big_word_end,
+            ),
+            (
+                keymap.vim_normal.move_first_non_blank.as_ref(),
+                &mut vim_normal.move_first_non_blank,
+            ),
+            (
+                keymap.vim_normal.repeat_find.as_ref(),
+                &mut vim_normal.repeat_find,
+            ),
+            (
+                keymap.vim_normal.repeat_find_reverse.as_ref(),
+                &mut vim_normal.repeat_find_reverse,
+            ),
+            (
+                keymap.vim_normal.paste_before.as_ref(),
+                &mut vim_normal.paste_before,
+            ),
+            (
+                keymap.vim_normal.join_lines.as_ref(),
+                &mut vim_normal.join_lines,
+            ),
+            (
+                keymap.vim_normal.indent_lines.as_ref(),
+                &mut vim_normal.indent_lines,
+            ),
+            (
+                keymap.vim_normal.dedent_lines.as_ref(),
+                &mut vim_normal.dedent_lines,
+            ),
         ] {
             if configured.is_none() {
                 bindings.retain(|binding| {
@@ -991,7 +1112,31 @@ impl RuntimeKeymap {
                 motion_word_backward
             ),
             motion_word_end: resolve_local!(keymap, defaults, vim_operator, motion_word_end),
+            motion_big_word_forward: resolve_local!(
+                keymap,
+                defaults,
+                vim_operator,
+                motion_big_word_forward
+            ),
+            motion_big_word_backward: resolve_local!(
+                keymap,
+                defaults,
+                vim_operator,
+                motion_big_word_backward
+            ),
+            motion_big_word_end: resolve_local!(
+                keymap,
+                defaults,
+                vim_operator,
+                motion_big_word_end
+            ),
             motion_line_start: resolve_local!(keymap, defaults, vim_operator, motion_line_start),
+            motion_first_non_blank: resolve_local!(
+                keymap,
+                defaults,
+                vim_operator,
+                motion_first_non_blank
+            ),
             motion_line_end: resolve_local!(keymap, defaults, vim_operator, motion_line_end),
             motion_find_forward: resolve_local!(
                 keymap,
@@ -1016,6 +1161,13 @@ impl RuntimeKeymap {
                 defaults,
                 vim_operator,
                 motion_till_backward
+            ),
+            motion_repeat_find: resolve_local!(keymap, defaults, vim_operator, motion_repeat_find),
+            motion_repeat_find_reverse: resolve_local!(
+                keymap,
+                defaults,
+                vim_operator,
+                motion_repeat_find_reverse
             ),
             motion_jump_top: resolve_local!(keymap, defaults, vim_operator, motion_jump_top),
             motion_jump_bottom: resolve_local!(keymap, defaults, vim_operator, motion_jump_bottom),
@@ -1078,6 +1230,30 @@ impl RuntimeKeymap {
             (
                 keymap.vim_operator.motion_line_end.as_ref(),
                 vim_operator.motion_line_end.as_slice(),
+            ),
+            (
+                keymap.vim_operator.motion_big_word_forward.as_ref(),
+                vim_operator.motion_big_word_forward.as_slice(),
+            ),
+            (
+                keymap.vim_operator.motion_big_word_backward.as_ref(),
+                vim_operator.motion_big_word_backward.as_slice(),
+            ),
+            (
+                keymap.vim_operator.motion_big_word_end.as_ref(),
+                vim_operator.motion_big_word_end.as_slice(),
+            ),
+            (
+                keymap.vim_operator.motion_first_non_blank.as_ref(),
+                vim_operator.motion_first_non_blank.as_slice(),
+            ),
+            (
+                keymap.vim_operator.motion_repeat_find.as_ref(),
+                vim_operator.motion_repeat_find.as_slice(),
+            ),
+            (
+                keymap.vim_operator.motion_repeat_find_reverse.as_ref(),
+                vim_operator.motion_repeat_find_reverse.as_slice(),
             ),
             (
                 keymap.vim_operator.motion_find_forward.as_ref(),
@@ -1143,6 +1319,30 @@ impl RuntimeKeymap {
             (
                 keymap.vim_operator.motion_jump_bottom.as_ref(),
                 &mut vim_operator.motion_jump_bottom,
+            ),
+            (
+                keymap.vim_operator.motion_big_word_forward.as_ref(),
+                &mut vim_operator.motion_big_word_forward,
+            ),
+            (
+                keymap.vim_operator.motion_big_word_backward.as_ref(),
+                &mut vim_operator.motion_big_word_backward,
+            ),
+            (
+                keymap.vim_operator.motion_big_word_end.as_ref(),
+                &mut vim_operator.motion_big_word_end,
+            ),
+            (
+                keymap.vim_operator.motion_first_non_blank.as_ref(),
+                &mut vim_operator.motion_first_non_blank,
+            ),
+            (
+                keymap.vim_operator.motion_repeat_find.as_ref(),
+                &mut vim_operator.motion_repeat_find,
+            ),
+            (
+                keymap.vim_operator.motion_repeat_find_reverse.as_ref(),
+                &mut vim_operator.motion_repeat_find_reverse,
             ),
         ] {
             if configured.is_none() {
@@ -1557,7 +1757,23 @@ impl RuntimeKeymap {
                 move_word_forward: default_bindings![plain(KeyCode::Char('w'))],
                 move_word_backward: default_bindings![plain(KeyCode::Char('b'))],
                 move_word_end: default_bindings![plain(KeyCode::Char('e'))],
+                move_big_word_forward: default_bindings![
+                    shift(KeyCode::Char('w')),
+                    plain(KeyCode::Char('W'))
+                ],
+                move_big_word_backward: default_bindings![
+                    shift(KeyCode::Char('b')),
+                    plain(KeyCode::Char('B'))
+                ],
+                move_big_word_end: default_bindings![
+                    shift(KeyCode::Char('e')),
+                    plain(KeyCode::Char('E'))
+                ],
                 move_line_start: default_bindings![plain(KeyCode::Char('0'))],
+                move_first_non_blank: default_bindings![
+                    plain(KeyCode::Char('^')),
+                    shift(KeyCode::Char('^'))
+                ],
                 move_line_end: default_bindings![
                     plain(KeyCode::Char('$')),
                     shift(KeyCode::Char('$'))
@@ -1566,6 +1782,8 @@ impl RuntimeKeymap {
                 find_backward: default_bindings![shift(KeyCode::Char('f'))],
                 till_forward: default_bindings![plain(KeyCode::Char('t'))],
                 till_backward: default_bindings![shift(KeyCode::Char('t'))],
+                repeat_find: default_bindings![plain(KeyCode::Char(';'))],
+                repeat_find_reverse: default_bindings![plain(KeyCode::Char(','))],
                 jump_top: default_bindings![],
                 jump_bottom: default_bindings![
                     shift(KeyCode::Char('g')),
@@ -1585,6 +1803,19 @@ impl RuntimeKeymap {
                 ],
                 yank_line: default_bindings![shift(KeyCode::Char('y')), plain(KeyCode::Char('Y'))],
                 paste_after: default_bindings![plain(KeyCode::Char('p'))],
+                paste_before: default_bindings![
+                    shift(KeyCode::Char('p')),
+                    plain(KeyCode::Char('P'))
+                ],
+                join_lines: default_bindings![shift(KeyCode::Char('j')), plain(KeyCode::Char('J'))],
+                indent_lines: default_bindings![
+                    plain(KeyCode::Char('>')),
+                    shift(KeyCode::Char('>'))
+                ],
+                dedent_lines: default_bindings![
+                    plain(KeyCode::Char('<')),
+                    shift(KeyCode::Char('<'))
+                ],
                 start_delete_operator: default_bindings![plain(KeyCode::Char('d'))],
                 start_yank_operator: default_bindings![plain(KeyCode::Char('y'))],
                 start_change_operator: default_bindings![plain(KeyCode::Char('c'))],
@@ -1603,7 +1834,23 @@ impl RuntimeKeymap {
                 motion_word_forward: default_bindings![plain(KeyCode::Char('w'))],
                 motion_word_backward: default_bindings![plain(KeyCode::Char('b'))],
                 motion_word_end: default_bindings![plain(KeyCode::Char('e'))],
+                motion_big_word_forward: default_bindings![
+                    shift(KeyCode::Char('w')),
+                    plain(KeyCode::Char('W'))
+                ],
+                motion_big_word_backward: default_bindings![
+                    shift(KeyCode::Char('b')),
+                    plain(KeyCode::Char('B'))
+                ],
+                motion_big_word_end: default_bindings![
+                    shift(KeyCode::Char('e')),
+                    plain(KeyCode::Char('E'))
+                ],
                 motion_line_start: default_bindings![plain(KeyCode::Char('0'))],
+                motion_first_non_blank: default_bindings![
+                    plain(KeyCode::Char('^')),
+                    shift(KeyCode::Char('^'))
+                ],
                 motion_line_end: default_bindings![
                     plain(KeyCode::Char('$')),
                     shift(KeyCode::Char('$'))
@@ -1612,6 +1859,8 @@ impl RuntimeKeymap {
                 motion_find_backward: default_bindings![shift(KeyCode::Char('f'))],
                 motion_till_forward: default_bindings![plain(KeyCode::Char('t'))],
                 motion_till_backward: default_bindings![shift(KeyCode::Char('t'))],
+                motion_repeat_find: default_bindings![plain(KeyCode::Char(';'))],
+                motion_repeat_find_reverse: default_bindings![plain(KeyCode::Char(','))],
                 motion_jump_top: default_bindings![],
                 motion_jump_bottom: default_bindings![
                     shift(KeyCode::Char('g')),

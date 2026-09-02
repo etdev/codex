@@ -2,4 +2,4 @@
 source: tui/src/keymap_setup.rs
 expression: repeat_row
 ---
-› Vim normal     Repeat Last Change         .
+› Vim normal     Repeat Last Change          .

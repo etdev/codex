@@ -4,6 +4,11 @@ use crate::key_hint::KeyBindingListExt;
 use crossterm::event::KeyEvent;
 use std::ops::Range;
 
+/// Bounds counts so a long digit run cannot freeze the composer or exhaust
+/// memory. Counts scale loop iterations and `repeat` allocations, and a
+/// composer draft is never long enough to address more than this.
+pub(super) const VIM_MAX_COUNT: usize = 1_000;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum VimMode {
     /// Normal mode routes printable keys to movement, operators, and mode transitions.
@@ -24,16 +29,34 @@ pub(super) enum VimOperator {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum VimPending {
     None,
-    Operator(VimOperator),
+    Operator {
+        operator: VimOperator,
+        /// Count typed before the operator (`2dw`); motion digits accumulate separately.
+        count: Option<usize>,
+    },
     TextObject {
         operator: VimOperator,
         scope: VimTextObjectScope,
     },
-    Replace,
+    Replace {
+        count: Option<usize>,
+    },
     Find {
         motion: VimFindMotion,
         operator: Option<VimOperator>,
+        count: Option<usize>,
     },
+    /// `>` or `<` pressed once; the same key again indents or dedents.
+    Indent {
+        direction: VimIndentDirection,
+        count: Option<usize>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum VimIndentDirection {
+    Increase,
+    Decrease,
 }
 
 /// Line-local character motions shared by navigation, operators, and dot replay.
@@ -45,6 +68,28 @@ pub(super) enum VimFindMotion {
     TillBackward,
 }
 
+impl VimFindMotion {
+    pub(super) const fn reversed(self) -> Self {
+        match self {
+            Self::Forward => Self::Backward,
+            Self::Backward => Self::Forward,
+            Self::TillForward => Self::TillBackward,
+            Self::TillBackward => Self::TillForward,
+        }
+    }
+
+    pub(super) const fn is_forward(self) -> bool {
+        matches!(self, Self::Forward | Self::TillForward)
+    }
+}
+
+/// A completed `f`/`F`/`t`/`T` search, replayable with `;` and `,`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct VimFind {
+    pub(super) motion: VimFindMotion,
+    pub(super) target: char,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum VimMotion {
     Left,
@@ -54,7 +99,11 @@ pub(super) enum VimMotion {
     WordForward,
     WordBackward,
     WordEnd,
+    BigWordForward,
+    BigWordBackward,
+    BigWordEnd,
     LineStart,
+    FirstNonBlank,
     LineEnd,
 }
 
@@ -313,7 +362,7 @@ impl TextArea {
         best
     }
 
-    fn is_inside_element(&self, pos: usize) -> bool {
+    pub(super) fn is_inside_element(&self, pos: usize) -> bool {
         self.elements
             .iter()
             .any(|element| pos >= element.range.start && pos < element.range.end)

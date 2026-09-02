@@ -3,7 +3,10 @@
 //! `f`/`F` land on a matching grapheme; `t`/`T` stop just before/after it. Forward operator
 //! motions include the destination, while backward motions exclude the original cursor.
 //! All four motions share these boundaries for navigation, `c`/`d`/`y`, and semantic `.` replay.
+//!
+//! A count typed before a command is stored with the recorded edit, so `3.` can replace it.
 
+use super::KillBufferKind;
 use super::TextArea;
 use super::VimMode;
 use super::VimMotion;
@@ -11,14 +14,30 @@ use super::VimOperator;
 use super::VimPending;
 use super::VimTextObject;
 use super::VimTextObjectScope;
+use super::vim::VIM_MAX_COUNT;
+use super::vim::VimFind;
 use super::vim::VimFindMotion;
+use super::vim::VimIndentDirection;
 use crate::key_hint::KeyBindingListExt;
 use crate::vim_search::SearchQuery;
+use codex_protocol::user_input::MAX_USER_INPUT_TEXT_CHARS;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyModifiers;
+use std::ops::Range;
 use unicode_segmentation::GraphemeCursor;
 use unicode_segmentation::UnicodeSegmentation;
+
+const VIM_INDENT: &str = "  ";
+
+/// Cap on the bytes a single paste may leave in the composer.
+///
+/// Neither the count nor the register size is bounded on its own, so `1000p`
+/// could otherwise ask for gigabytes. The largest sendable message is
+/// `MAX_USER_INPUT_TEXT_CHARS` chars of at most four bytes, so this refuses
+/// only pastes that could never be sent regardless, and leaves judging the
+/// limit itself to the composer's submit-time check.
+const MAX_VIM_PASTE_BYTES: usize = MAX_USER_INPUT_TEXT_CHARS * 4;
 
 #[derive(Clone, Debug)]
 pub(crate) enum VimEdit {
@@ -34,7 +53,11 @@ pub(crate) struct VimPersistentState {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct VimEditorEdit(VimAction);
+pub(crate) struct VimEditorEdit {
+    action: VimAction,
+    /// Explicit count typed before the command; `None` means the command default.
+    count: Option<usize>,
+}
 
 #[derive(Clone, Copy, Debug)]
 pub(super) enum VimInsertPosition {
@@ -75,6 +98,9 @@ pub(super) enum VimAction {
     Change(VimEditTarget),
     Replace(char),
     PasteAfter,
+    PasteBefore,
+    JoinLines,
+    Indent(VimIndentDirection),
     DeleteBackward,
     DeleteForward,
     DeleteBackwardWord,
@@ -92,6 +118,22 @@ pub(super) enum VimAction {
     MoveLineEnd { move_down_at_eol: bool },
 }
 
+impl VimAction {
+    /// Whether `N.` should replace this command's count rather than replay the whole change.
+    const fn accepts_count(&self) -> bool {
+        matches!(
+            self,
+            Self::Delete(_)
+                | Self::Change(_)
+                | Self::Replace(_)
+                | Self::PasteAfter
+                | Self::PasteBefore
+                | Self::JoinLines
+                | Self::Indent(_)
+        )
+    }
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct VimCommandState {
     pub(super) pending_change: Vec<VimEdit>,
@@ -99,6 +141,7 @@ pub(crate) struct VimCommandState {
     changed: bool,
     pub(super) replaying: bool,
     replace_steps: Vec<VimReplaceStep>,
+    pub(super) last_find: Option<VimFind>,
 }
 
 #[derive(Debug)]
@@ -108,6 +151,41 @@ struct VimReplaceStep {
     start: usize,
     inserted_len: usize,
     original: String,
+}
+
+pub(super) fn vim_count_digit(event: KeyEvent) -> Option<u8> {
+    if !matches!(event.modifiers, KeyModifiers::NONE) {
+        return None;
+    }
+    match event.code {
+        KeyCode::Char(ch) if ch.is_ascii_digit() => Some(ch as u8 - b'0'),
+        _ => None,
+    }
+}
+
+pub(super) fn push_vim_count_digit(count: &mut Option<usize>, digit: u8) {
+    let next = count
+        .unwrap_or(0)
+        .saturating_mul(10)
+        .saturating_add(usize::from(digit))
+        .min(VIM_MAX_COUNT);
+    *count = Some(next);
+}
+
+/// Multiply an operator count by a motion count (`2d3w` deletes six words).
+pub(super) fn combined_vim_count(
+    operator_count: Option<usize>,
+    motion_count: Option<usize>,
+) -> Option<usize> {
+    if operator_count.is_none() && motion_count.is_none() {
+        return None;
+    }
+    Some(
+        operator_count
+            .unwrap_or(1)
+            .saturating_mul(motion_count.unwrap_or(1))
+            .min(VIM_MAX_COUNT),
+    )
 }
 
 impl TextArea {
@@ -229,7 +307,7 @@ impl TextArea {
             && !self.vim_commands.replaying
             && !self.vim_commands.pending_change.is_empty();
         let prior_len = self.text.len();
-        if !self.apply_vim_editor_action(action.clone()) {
+        if !self.apply_vim_editor_action(action.clone(), /*count*/ None) {
             return false;
         }
         let changed =
@@ -247,22 +325,31 @@ impl TextArea {
         if recording && (changed || !deletion) {
             self.vim_commands
                 .pending_change
-                .push(VimEdit::Editor(VimEditorEdit(action)));
+                .push(VimEdit::Editor(VimEditorEdit {
+                    action,
+                    count: None,
+                }));
         }
         self.vim_commands.changed |= recording && changed;
         true
     }
 
-    pub(super) fn start_vim_edit(&mut self, action: VimAction) -> bool {
+    pub(super) fn start_vim_edit(&mut self, action: VimAction, count: Option<usize>) -> bool {
         let prior_len = self.text.len();
-        self.vim_commands.pending_change = vec![VimEdit::Editor(VimEditorEdit(action.clone()))];
+        self.vim_commands.pending_change = vec![VimEdit::Editor(VimEditorEdit {
+            action: action.clone(),
+            count,
+        })];
         self.vim_commands.changed = false;
-        if !self.apply_vim_editor_action(action.clone()) {
+        if !self.apply_vim_editor_action(action.clone(), count) {
             self.vim_commands.pending_change.clear();
             return false;
         }
-        self.vim_commands.changed =
-            self.text.len() != prior_len || matches!(action, VimAction::Replace(_));
+        self.vim_commands.changed = self.text.len() != prior_len
+            || matches!(
+                action,
+                VimAction::Replace(_) | VimAction::JoinLines | VimAction::Indent(_)
+            );
         if self.vim_mode == VimMode::Normal {
             self.finish_pending_vim_change();
         }
@@ -292,9 +379,37 @@ impl TextArea {
         self.vim_commands.replaying = false;
     }
 
+    /// Replay the last change. `N.` replaces the recorded count of a counted
+    /// command, and repeats an insert session `N` times.
+    pub(super) fn repeat_last_vim_change(&mut self, count: Option<usize>) {
+        let Some(mut edits) = self.begin_vim_repeat() else {
+            return;
+        };
+        let mut times = 1;
+        if let Some(n) = count {
+            match edits.first_mut() {
+                Some(VimEdit::Editor(first)) if first.action.accepts_count() => {
+                    first.count = Some(n);
+                    self.vim_commands.last_change = edits.clone();
+                }
+                _ => times = n,
+            }
+        }
+        'replay: for _ in 0..times {
+            for edit in &edits {
+                if !self.apply_vim_edit(edit) {
+                    break 'replay;
+                }
+            }
+        }
+        self.finish_vim_repeat();
+    }
+
     pub(crate) fn apply_vim_edit(&mut self, edit: &VimEdit) -> bool {
         match edit {
-            VimEdit::Editor(VimEditorEdit(action)) => self.apply_vim_editor_action(action.clone()),
+            VimEdit::Editor(VimEditorEdit { action, count }) => {
+                self.apply_vim_editor_action(action.clone(), *count)
+            }
             VimEdit::Text(text) => {
                 if !matches!(self.vim_mode, VimMode::Insert | VimMode::Replace) {
                     return false;
@@ -305,12 +420,13 @@ impl TextArea {
         }
     }
 
-    fn apply_vim_editor_action(&mut self, action: VimAction) -> bool {
+    fn apply_vim_editor_action(&mut self, action: VimAction, count: Option<usize>) -> bool {
         // Editor actions invalidate contiguous Replace offsets, including during replay.
         if !matches!(action, VimAction::RestoreReplacedCharacter) {
             self.clear_vim_replace_recovery();
         }
         let prior_len = self.text.len();
+        let n = count.unwrap_or(1).max(1);
         let is_change = matches!(action, VimAction::Change(_));
         match action {
             VimAction::EnterReplaceMode => {
@@ -355,20 +471,33 @@ impl TextArea {
                 };
                 match target {
                     VimEditTarget::Character => {
-                        if self.cursor_pos < self.end_of_current_line() {
-                            self.delete_forward_kill(/*n*/ 1);
+                        let eol = self.end_of_current_line();
+                        let mut end = self.cursor_pos;
+                        for _ in 0..n {
+                            if end >= eol {
+                                break;
+                            }
+                            end = self.next_atomic_boundary(end).min(eol);
+                        }
+                        if end > self.cursor_pos {
+                            self.kill_range(self.cursor_pos..end);
                         }
                         if operator == VimOperator::Change {
                             self.vim_mode = VimMode::Insert;
                         }
                     }
                     VimEditTarget::Line => {
+                        let range = self.counted_line_range(n);
                         if operator == VimOperator::Delete {
-                            self.kill_current_line();
-                        } else {
-                            let range =
-                                self.beginning_of_current_line()..self.end_of_current_line();
                             self.kill_line_range(range);
+                        } else {
+                            // `cc` keeps the final newline so one empty line remains.
+                            let end = if self.text[..range.end].ends_with('\n') {
+                                range.end - 1
+                            } else {
+                                range.end
+                            };
+                            self.kill_line_range(range.start..end);
                             self.vim_mode = VimMode::Insert;
                         }
                     }
@@ -378,7 +507,7 @@ impl TextArea {
                             self.vim_mode = VimMode::Insert;
                         }
                     }
-                    VimEditTarget::Motion(motion) => self.apply_vim_operator(operator, motion),
+                    VimEditTarget::Motion(motion) => self.apply_vim_operator(operator, motion, n),
                     VimEditTarget::Search(query) => {
                         if !self.apply_vim_search(&query, Some(operator)) {
                             return false;
@@ -391,12 +520,12 @@ impl TextArea {
                         self.apply_vim_operator_to_range(operator, range);
                     }
                     VimEditTarget::Find { motion, target } => {
-                        if !self.find_vim_character(motion, Some(operator), target) {
+                        if !self.find_vim_character(motion, Some(operator), target, n) {
                             return false;
                         }
                     }
                     VimEditTarget::BufferJump { last } => {
-                        self.jump_to_vim_buffer_line(last, Some(operator));
+                        self.jump_to_vim_buffer_line(last, Some(operator), count);
                     }
                 }
                 if operator == VimOperator::Change {
@@ -405,17 +534,38 @@ impl TextArea {
                 return self.text.len() != prior_len;
             }
             VimAction::Replace(ch) => {
-                if self.cursor_pos >= self.end_of_current_line() {
-                    return false;
-                }
                 let start = self.cursor_pos;
-                let end = self.next_atomic_boundary(start);
-                self.replace_range(start..end, &ch.to_string());
-                self.set_cursor(start + usize::from(ch == '\n'));
+                let eol = self.end_of_current_line();
+                let mut end = start;
+                for _ in 0..n {
+                    if end >= eol {
+                        // Vim refuses `5rx` when fewer than five characters remain.
+                        return false;
+                    }
+                    end = self.next_atomic_boundary(end).min(eol);
+                }
+                let replacement = ch.to_string().repeat(n);
+                self.replace_range(start..end, &replacement);
+                if ch == '\n' {
+                    self.set_cursor(start + replacement.len());
+                } else {
+                    // Vim leaves the cursor on the last replaced character.
+                    self.set_cursor(start + replacement.len() - ch.len_utf8());
+                }
             }
             VimAction::PasteAfter => {
-                self.paste_after_cursor();
+                self.paste_vim(/*after*/ true, n);
                 return self.text.len() != prior_len;
+            }
+            VimAction::PasteBefore => {
+                self.paste_vim(/*after*/ false, n);
+                return self.text.len() != prior_len;
+            }
+            VimAction::JoinLines => {
+                return self.join_vim_lines(count.unwrap_or(2).max(2));
+            }
+            VimAction::Indent(direction) => {
+                return self.indent_vim_lines(direction, n);
             }
             VimAction::DeleteBackward => self.delete_backward(/*n*/ 1),
             VimAction::DeleteForward => self.delete_forward(/*n*/ 1),
@@ -440,41 +590,66 @@ impl TextArea {
         true
     }
 
-    pub(super) fn handle_vim_extra_command(&mut self, event: KeyEvent) -> bool {
+    /// Normal-mode commands that live outside the core motion/operator dispatch.
+    pub(super) fn handle_vim_extra_command(
+        &mut self,
+        event: KeyEvent,
+        count: Option<usize>,
+    ) -> bool {
+        let n = count.unwrap_or(1);
         if self.vim_normal_keymap.enter_replace_mode.is_pressed(event) {
-            self.start_vim_edit(VimAction::EnterReplaceMode);
+            self.start_vim_edit(VimAction::EnterReplaceMode, /*count*/ None);
             return true;
         }
 
         if self.vim_normal_keymap.replace_char.is_pressed(event)
             && self.cursor_pos < self.end_of_current_line()
         {
-            self.vim_pending = VimPending::Replace;
+            self.vim_pending = VimPending::Replace { count };
             return true;
         }
         if self.vim_normal_keymap.repeat_last_change.is_pressed(event) {
-            if let Some(edits) = self.begin_vim_repeat() {
-                for edit in edits {
-                    if !self.apply_vim_edit(&edit) {
-                        break;
-                    }
-                }
-                self.finish_vim_repeat();
-            }
+            self.repeat_last_vim_change(count);
+            return true;
+        }
+        if self.vim_normal_keymap.paste_before.is_pressed(event) {
+            self.start_vim_edit(VimAction::PasteBefore, count);
+            return true;
+        }
+        if self.vim_normal_keymap.join_lines.is_pressed(event) {
+            self.start_vim_edit(VimAction::JoinLines, count);
+            return true;
+        }
+        if self.vim_normal_keymap.indent_lines.is_pressed(event) {
+            self.vim_pending = VimPending::Indent {
+                direction: VimIndentDirection::Increase,
+                count,
+            };
+            return true;
+        }
+        if self.vim_normal_keymap.dedent_lines.is_pressed(event) {
+            self.vim_pending = VimPending::Indent {
+                direction: VimIndentDirection::Decrease,
+                count,
+            };
             return true;
         }
         if self.vim_normal_keymap.find_forward.is_pressed(event) {
-            self.start_vim_find(VimFindMotion::Forward, /*operator*/ None);
+            self.start_vim_find(VimFindMotion::Forward, /*operator*/ None, count);
         } else if self.vim_normal_keymap.find_backward.is_pressed(event) {
-            self.start_vim_find(VimFindMotion::Backward, /*operator*/ None);
+            self.start_vim_find(VimFindMotion::Backward, /*operator*/ None, count);
         } else if self.vim_normal_keymap.till_forward.is_pressed(event) {
-            self.start_vim_find(VimFindMotion::TillForward, /*operator*/ None);
+            self.start_vim_find(VimFindMotion::TillForward, /*operator*/ None, count);
         } else if self.vim_normal_keymap.till_backward.is_pressed(event) {
-            self.start_vim_find(VimFindMotion::TillBackward, /*operator*/ None);
+            self.start_vim_find(VimFindMotion::TillBackward, /*operator*/ None, count);
+        } else if self.vim_normal_keymap.repeat_find.is_pressed(event) {
+            self.repeat_vim_find(/*reverse*/ false, /*operator*/ None, n);
+        } else if self.vim_normal_keymap.repeat_find_reverse.is_pressed(event) {
+            self.repeat_vim_find(/*reverse*/ true, /*operator*/ None, n);
         } else if self.vim_normal_keymap.jump_top.is_pressed(event) {
-            self.jump_to_vim_buffer_line(/*last*/ false, /*operator*/ None);
+            self.jump_to_vim_buffer_line(/*last*/ false, /*operator*/ None, count);
         } else if self.vim_normal_keymap.jump_bottom.is_pressed(event) {
-            self.jump_to_vim_buffer_line(/*last*/ true, /*operator*/ None);
+            self.jump_to_vim_buffer_line(/*last*/ true, /*operator*/ None, count);
         } else {
             return false;
         }
@@ -485,49 +660,39 @@ impl TextArea {
         &mut self,
         operator: VimOperator,
         event: KeyEvent,
+        count: Option<usize>,
     ) -> bool {
-        if self
-            .vim_operator_keymap
-            .motion_find_forward
-            .is_pressed(event)
+        let keymap = &self.vim_operator_keymap;
+        if keymap.motion_find_forward.is_pressed(event) {
+            self.start_vim_find(VimFindMotion::Forward, Some(operator), count);
+        } else if keymap.motion_find_backward.is_pressed(event) {
+            self.start_vim_find(VimFindMotion::Backward, Some(operator), count);
+        } else if keymap.motion_till_forward.is_pressed(event) {
+            self.start_vim_find(VimFindMotion::TillForward, Some(operator), count);
+        } else if keymap.motion_till_backward.is_pressed(event) {
+            self.start_vim_find(VimFindMotion::TillBackward, Some(operator), count);
+        } else if keymap.motion_repeat_find.is_pressed(event) {
+            self.repeat_vim_find(/*reverse*/ false, Some(operator), count.unwrap_or(1));
+        } else if keymap.motion_repeat_find_reverse.is_pressed(event) {
+            self.repeat_vim_find(/*reverse*/ true, Some(operator), count.unwrap_or(1));
+        } else if keymap.motion_jump_top.is_pressed(event)
+            || keymap.motion_jump_bottom.is_pressed(event)
         {
-            self.start_vim_find(VimFindMotion::Forward, Some(operator));
-        } else if self
-            .vim_operator_keymap
-            .motion_find_backward
-            .is_pressed(event)
-        {
-            self.start_vim_find(VimFindMotion::Backward, Some(operator));
-        } else if self
-            .vim_operator_keymap
-            .motion_till_forward
-            .is_pressed(event)
-        {
-            self.start_vim_find(VimFindMotion::TillForward, Some(operator));
-        } else if self
-            .vim_operator_keymap
-            .motion_till_backward
-            .is_pressed(event)
-        {
-            self.start_vim_find(VimFindMotion::TillBackward, Some(operator));
-        } else if self.vim_operator_keymap.motion_jump_top.is_pressed(event)
-            || self
-                .vim_operator_keymap
-                .motion_jump_bottom
-                .is_pressed(event)
-        {
-            let last = self
-                .vim_operator_keymap
-                .motion_jump_bottom
-                .is_pressed(event);
+            let last = keymap.motion_jump_bottom.is_pressed(event);
             match operator {
                 VimOperator::Delete => {
-                    self.start_vim_edit(VimAction::Delete(VimEditTarget::BufferJump { last }));
+                    self.start_vim_edit(
+                        VimAction::Delete(VimEditTarget::BufferJump { last }),
+                        count,
+                    );
                 }
                 VimOperator::Change => {
-                    self.start_vim_edit(VimAction::Change(VimEditTarget::BufferJump { last }));
+                    self.start_vim_edit(
+                        VimAction::Change(VimEditTarget::BufferJump { last }),
+                        count,
+                    );
                 }
-                VimOperator::Yank => self.jump_to_vim_buffer_line(last, Some(operator)),
+                VimOperator::Yank => self.jump_to_vim_buffer_line(last, Some(operator), count),
             }
         } else {
             return false;
@@ -537,38 +702,114 @@ impl TextArea {
 
     pub(super) fn handle_vim_pending_command(&mut self, pending: VimPending, event: KeyEvent) {
         match pending {
-            VimPending::Replace => {
+            VimPending::Replace { count } => {
                 if let Some(ch) = vim_command_char(event) {
-                    self.start_vim_edit(VimAction::Replace(ch));
+                    self.start_vim_edit(VimAction::Replace(ch), count);
                 }
             }
-            VimPending::Find { motion, operator } => {
+            VimPending::Find {
+                motion,
+                operator,
+                count,
+            } => {
                 if let Some(ch) = vim_command_char(event) {
-                    match operator {
-                        Some(VimOperator::Delete) => {
-                            self.start_vim_edit(VimAction::Delete(VimEditTarget::Find {
-                                motion,
-                                target: ch,
-                            }));
-                        }
-                        Some(VimOperator::Change) => {
-                            self.start_vim_edit(VimAction::Change(VimEditTarget::Find {
-                                motion,
-                                target: ch,
-                            }));
-                        }
-                        Some(VimOperator::Yank) | None => {
-                            self.find_vim_character(motion, operator, ch);
-                        }
+                    self.vim_commands.last_find = Some(VimFind { motion, target: ch });
+                    self.run_vim_find(motion, operator, ch, count);
+                }
+            }
+            VimPending::Indent { direction, count } => {
+                let pressed = match direction {
+                    VimIndentDirection::Increase => {
+                        self.vim_normal_keymap.indent_lines.is_pressed(event)
                     }
+                    VimIndentDirection::Decrease => {
+                        self.vim_normal_keymap.dedent_lines.is_pressed(event)
+                    }
+                };
+                if pressed {
+                    self.start_vim_edit(VimAction::Indent(direction), count);
                 }
             }
-            VimPending::None | VimPending::Operator(_) | VimPending::TextObject { .. } => {}
+            VimPending::None | VimPending::Operator { .. } | VimPending::TextObject { .. } => {}
         }
     }
 
-    fn start_vim_find(&mut self, motion: VimFindMotion, operator: Option<VimOperator>) {
-        self.vim_pending = VimPending::Find { motion, operator };
+    fn start_vim_find(
+        &mut self,
+        motion: VimFindMotion,
+        operator: Option<VimOperator>,
+        count: Option<usize>,
+    ) {
+        self.vim_pending = VimPending::Find {
+            motion,
+            operator,
+            count,
+        };
+    }
+
+    /// Run a find as a recorded edit (`d`/`c`) or a plain motion (`y`/navigation).
+    fn run_vim_find(
+        &mut self,
+        motion: VimFindMotion,
+        operator: Option<VimOperator>,
+        target: char,
+        count: Option<usize>,
+    ) {
+        match operator {
+            Some(VimOperator::Delete) => {
+                self.start_vim_edit(
+                    VimAction::Delete(VimEditTarget::Find { motion, target }),
+                    count,
+                );
+            }
+            Some(VimOperator::Change) => {
+                self.start_vim_edit(
+                    VimAction::Change(VimEditTarget::Find { motion, target }),
+                    count,
+                );
+            }
+            Some(VimOperator::Yank) | None => {
+                self.find_vim_character(motion, operator, target, count.unwrap_or(1));
+            }
+        }
+    }
+
+    /// `;` and `,` replay the last `f`/`F`/`t`/`T`; a till repeat skips an adjacent match.
+    fn repeat_vim_find(&mut self, reverse: bool, operator: Option<VimOperator>, count: usize) {
+        let Some(find) = self.vim_commands.last_find else {
+            return;
+        };
+        let motion = if reverse {
+            find.motion.reversed()
+        } else {
+            find.motion
+        };
+        let count = if matches!(
+            motion,
+            VimFindMotion::TillForward | VimFindMotion::TillBackward
+        ) && self.vim_till_target_is_adjacent(motion, find.target)
+        {
+            count.saturating_add(1)
+        } else {
+            count
+        };
+        self.run_vim_find(motion, operator, find.target, Some(count));
+    }
+
+    fn vim_till_target_is_adjacent(&self, motion: VimFindMotion, target: char) -> bool {
+        if motion.is_forward() {
+            let next = self.next_atomic_boundary(self.cursor_pos);
+            next < self.end_of_current_line()
+                && self.is_vim_command_target(next)
+                && self.text[next..].starts_with(target)
+        } else {
+            let bol = self.beginning_of_current_line();
+            if self.cursor_pos <= bol {
+                return false;
+            }
+            let prev = self.prev_atomic_boundary(self.cursor_pos);
+            prev >= bol && self.is_vim_command_target(prev) && self.text[prev..].starts_with(target)
+        }
     }
 
     fn find_vim_character(
@@ -576,8 +817,10 @@ impl TextArea {
         motion: VimFindMotion,
         operator: Option<VimOperator>,
         target: char,
+        count: usize,
     ) -> bool {
         let origin = self.cursor_pos;
+        let count = count.max(1);
         let found = match motion {
             VimFindMotion::Forward | VimFindMotion::TillForward => {
                 let line_end = self.end_of_current_line();
@@ -587,9 +830,10 @@ impl TextArea {
                 let start = self.next_atomic_boundary(origin);
                 self.text[start..line_end]
                     .grapheme_indices(/*is_extended*/ true)
-                    .find(|(offset, grapheme)| {
+                    .filter(|(offset, grapheme)| {
                         grapheme.starts_with(target) && self.is_vim_command_target(start + offset)
                     })
+                    .nth(count - 1)
                     .map(|(offset, grapheme)| start + offset..start + offset + grapheme.len())
             }
             VimFindMotion::Backward | VimFindMotion::TillBackward => {
@@ -597,10 +841,11 @@ impl TextArea {
                 self.text[line_start..origin]
                     .grapheme_indices(/*is_extended*/ true)
                     .rev()
-                    .find(|(offset, grapheme)| {
+                    .filter(|(offset, grapheme)| {
                         grapheme.starts_with(target)
                             && self.is_vim_command_target(line_start + offset)
                     })
+                    .nth(count - 1)
                     .map(|(offset, grapheme)| {
                         let start = line_start + offset;
                         start..start + grapheme.len()
@@ -639,13 +884,26 @@ impl TextArea {
         true
     }
 
-    fn jump_to_vim_buffer_line(&mut self, last: bool, operator: Option<VimOperator>) {
+    /// `gg`/`G` without a count target the first/last line; `NG` and `Ngg` target line `N`.
+    fn jump_to_vim_buffer_line(
+        &mut self,
+        last: bool,
+        operator: Option<VimOperator>,
+        count: Option<usize>,
+    ) {
+        let target_start = match count {
+            Some(line) => self.step_logical_lines(0, line.saturating_sub(1), /*down*/ true),
+            None if last => self.beginning_of_line(self.text.len()),
+            None => 0,
+        };
         if let Some(operator) = operator {
-            let current = self.current_line_range_with_newline();
-            let range = if last {
-                current.start..self.text.len()
+            let current = self.beginning_of_current_line();
+            let first = current.min(target_start);
+            let last_line = current.max(target_start);
+            let range = if count.is_none() && last {
+                current..self.text.len()
             } else {
-                0..current.end
+                first..self.line_range_with_newline(last_line).end
             };
             match operator {
                 VimOperator::Delete => self.kill_line_range(range),
@@ -657,12 +915,7 @@ impl TextArea {
             }
             return;
         }
-        let start = if last {
-            self.beginning_of_line(self.text.len())
-        } else {
-            0
-        };
-        self.set_cursor(start);
+        self.set_cursor(target_start);
         self.set_cursor(self.first_non_blank_of_current_line());
     }
 
@@ -674,6 +927,272 @@ impl TextArea {
             && GraphemeCursor::new(position, self.text.len(), /*is_extended*/ true)
                 .is_boundary(&self.text, /*chunk_start*/ 0)
                 .unwrap_or(false)
+    }
+
+    // ---- Line arithmetic shared by counted linewise commands ----
+
+    /// Byte range of the logical line starting at `line_start`, including its newline.
+    pub(super) fn line_range_with_newline(&self, line_start: usize) -> Range<usize> {
+        let eol = self.end_of_line(line_start);
+        line_start..if eol < self.text.len() { eol + 1 } else { eol }
+    }
+
+    /// Walk `count` logical lines from `line_start`, stopping at the buffer edge.
+    pub(super) fn step_logical_lines(
+        &self,
+        mut line_start: usize,
+        count: usize,
+        down: bool,
+    ) -> usize {
+        for _ in 0..count {
+            let next = if down {
+                let eol = self.end_of_line(line_start);
+                if eol >= self.text.len() {
+                    line_start
+                } else {
+                    eol + 1
+                }
+            } else if line_start == 0 {
+                0
+            } else {
+                self.beginning_of_line(line_start - 1)
+            };
+            if next == line_start {
+                break;
+            }
+            line_start = next;
+        }
+        line_start
+    }
+
+    /// The current line through `count - 1` lines below it, newlines included.
+    pub(super) fn counted_line_range(&self, count: usize) -> Range<usize> {
+        let start = self.beginning_of_current_line();
+        let last = self.step_logical_lines(start, count.saturating_sub(1), /*down*/ true);
+        start..self.line_range_with_newline(last).end
+    }
+
+    // ---- WORD motions ----
+
+    /// Whether `pos` begins whitespace separating WORDs.
+    ///
+    /// An element is one indivisible WORD, so its interior never separates,
+    /// even though placeholders like `[Pasted Content 12 chars]` hold spaces.
+    fn starts_big_word_separator(&self, pos: usize) -> bool {
+        if self.is_inside_element(pos) {
+            return false;
+        }
+        self.text[pos..]
+            .chars()
+            .next()
+            .is_some_and(char::is_whitespace)
+    }
+
+    pub(super) fn beginning_of_next_big_word(&self) -> usize {
+        let mut pos = self.cursor_pos;
+        let mut saw_whitespace = self.starts_big_word_separator(pos);
+        while pos < self.text.len() {
+            pos = self.next_atomic_boundary(pos);
+            if pos >= self.text.len() {
+                break;
+            }
+            if self.starts_big_word_separator(pos) {
+                saw_whitespace = true;
+            } else if saw_whitespace {
+                return pos;
+            }
+        }
+        self.text.len()
+    }
+
+    pub(super) fn beginning_of_previous_big_word(&self) -> usize {
+        let mut pos = self.cursor_pos;
+        loop {
+            let prev = self.prev_atomic_boundary(pos);
+            if prev == pos {
+                return 0;
+            }
+            pos = prev;
+            if !self.starts_big_word_separator(pos) {
+                break;
+            }
+        }
+        loop {
+            let prev = self.prev_atomic_boundary(pos);
+            if prev == pos || self.starts_big_word_separator(prev) {
+                return pos;
+            }
+            pos = prev;
+        }
+    }
+
+    pub(super) fn big_word_end_exclusive(&self) -> usize {
+        self.big_word_end_exclusive_from(self.cursor_pos)
+    }
+
+    fn big_word_end_exclusive_from(&self, cursor: usize) -> usize {
+        let mut pos = cursor;
+        while pos < self.text.len() && self.starts_big_word_separator(pos) {
+            pos = self.next_atomic_boundary(pos);
+        }
+        while pos < self.text.len() && !self.starts_big_word_separator(pos) {
+            pos = self.next_atomic_boundary(pos);
+        }
+        pos
+    }
+
+    pub(super) fn vim_big_word_end_cursor(&self) -> usize {
+        let end = self.big_word_end_exclusive();
+        let target = if end > self.cursor_pos {
+            self.prev_atomic_boundary(end)
+        } else {
+            end
+        };
+        if target == self.cursor_pos && end < self.text.len() {
+            self.prev_atomic_boundary(self.big_word_end_exclusive_from(end))
+        } else {
+            target
+        }
+    }
+
+    // ---- Paste, join, indent ----
+
+    pub(super) fn paste_vim(&mut self, after: bool, count: usize) {
+        if self.kill_buffer.is_empty() {
+            return;
+        }
+        // A linewise register yanked from the final line has no trailing
+        // newline; repeating it raw would run the copies onto one line.
+        let linewise = self.kill_buffer_kind == KillBufferKind::Linewise;
+        let needs_terminator = linewise && !self.kill_buffer.ends_with('\n');
+        // Sized before copying anything, so a refused paste stays O(1) even
+        // when `.` replays it against a full buffer.
+        let unit_len = self.kill_buffer.len() + usize::from(needs_terminator);
+        if self
+            .text
+            .len()
+            .saturating_add(unit_len.saturating_mul(count))
+            > MAX_VIM_PASTE_BYTES
+        {
+            return;
+        }
+        let mut unit = self.kill_buffer.clone();
+        if needs_terminator {
+            unit.push('\n');
+        }
+        let repeated = unit.repeat(count);
+        if linewise {
+            self.paste_vim_lines(after, repeated);
+            return;
+        }
+        let insert_at = if after {
+            self.next_atomic_boundary(self.cursor_pos)
+        } else {
+            self.cursor_pos
+        };
+        self.set_cursor(insert_at);
+        self.insert_str(&repeated);
+    }
+
+    fn paste_vim_lines(&mut self, after: bool, repeated: String) {
+        let bol = self.beginning_of_current_line();
+        let eol = self.end_of_current_line();
+        // Strip only the structural terminator: a register of blank lines is
+        // all newlines, and trimming them all would collapse the paste.
+        let payload = repeated.strip_suffix('\n').unwrap_or(&repeated);
+        let (insert_at, text, cursor) = if after {
+            if eol < self.text.len() {
+                (eol + 1, format!("{payload}\n"), eol + 1)
+            } else {
+                (eol, format!("\n{payload}"), eol + 1)
+            }
+        } else {
+            (bol, format!("{payload}\n"), bol)
+        };
+        self.insert_str_at(insert_at, &text);
+        self.set_cursor(cursor.min(self.text.len()));
+    }
+
+    /// Join `line_count` lines starting at the cursor line; returns whether anything joined.
+    fn join_vim_lines(&mut self, line_count: usize) -> bool {
+        let mut joined = false;
+        let mut cursor = self.cursor_pos;
+        for _ in 1..line_count {
+            let eol = self.end_of_current_line();
+            if eol >= self.text.len() {
+                break;
+            }
+            let next_start = eol + 1;
+            let next_non_blank = self.first_non_blank_of_line(next_start);
+            // Vim inserts one separating space, except when the first line
+            // already ends in whitespace, the next line is empty, or it opens
+            // with `)`.
+            let needs_space = eol > self.beginning_of_current_line()
+                && next_non_blank < self.end_of_line(next_start)
+                && !self.text[..eol].ends_with(char::is_whitespace)
+                && !self.text[next_non_blank..].starts_with(')');
+            // The cursor lands on the last join.
+            cursor = eol;
+            self.replace_range(eol..next_non_blank, if needs_space { " " } else { "" });
+            joined = true;
+        }
+        if joined {
+            self.set_cursor(cursor.min(self.vim_line_end_cursor()));
+        }
+        joined
+    }
+
+    /// Shift `count` lines from the cursor line by one indent level; returns whether any changed.
+    fn indent_vim_lines(&mut self, direction: VimIndentDirection, count: usize) -> bool {
+        let first = self.beginning_of_current_line();
+        let mut starts = Vec::new();
+        let mut line = first;
+        for _ in 0..count {
+            starts.push(line);
+            let next = self.step_logical_lines(line, /*count*/ 1, /*down*/ true);
+            if next == line {
+                break;
+            }
+            line = next;
+        }
+        let mut changed = false;
+        for start in starts.into_iter().rev() {
+            match direction {
+                VimIndentDirection::Increase => {
+                    if start < self.end_of_line(start) {
+                        self.insert_str_at(start, VIM_INDENT);
+                        changed = true;
+                    }
+                }
+                VimIndentDirection::Decrease => {
+                    let eol = self.end_of_line(start);
+                    let remove = if self.text[start..eol].starts_with('\t') {
+                        '\t'.len_utf8()
+                    } else {
+                        self.text[start..eol]
+                            .char_indices()
+                            .take_while(|(_, ch)| *ch == ' ')
+                            .take(VIM_INDENT.len())
+                            .last()
+                            .map_or(0, |(idx, ch)| idx + ch.len_utf8())
+                    };
+                    if remove > 0 {
+                        self.replace_range(start..start + remove, "");
+                        changed = true;
+                    }
+                }
+            }
+        }
+        self.set_cursor(self.first_non_blank_of_line(first));
+        changed
+    }
+
+    fn first_non_blank_of_line(&self, line_start: usize) -> usize {
+        let eol = self.end_of_line(line_start);
+        self.text[line_start..eol]
+            .char_indices()
+            .find_map(|(offset, ch)| (!ch.is_whitespace()).then_some(line_start + offset))
+            .unwrap_or(eol)
     }
 }
 
@@ -699,3 +1218,7 @@ fn vim_command_char(event: KeyEvent) -> Option<char> {
 #[cfg(test)]
 #[path = "vim_commands_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "vim_extended_tests.rs"]
+mod extended_tests;

@@ -111,7 +111,10 @@ impl TextArea {
 
         if !self.vim_search_enabled
             || !self.is_vim_normal_mode()
-            || !matches!(self.vim_pending, VimPending::None | VimPending::Operator(_))
+            || !matches!(
+                self.vim_pending,
+                VimPending::None | VimPending::Operator { .. }
+            )
         {
             return None;
         }
@@ -173,13 +176,22 @@ impl TextArea {
             query
         };
         match std::mem::replace(&mut self.vim_pending, VimPending::None) {
-            VimPending::Operator(VimOperator::Delete) => {
-                self.start_vim_edit(VimAction::Delete(VimEditTarget::Search(query)));
+            VimPending::Operator {
+                operator: VimOperator::Delete,
+                ..
+            } => {
+                self.start_vim_edit(VimAction::Delete(VimEditTarget::Search(query)), None);
             }
-            VimPending::Operator(VimOperator::Change) => {
-                self.start_vim_edit(VimAction::Change(VimEditTarget::Search(query)));
+            VimPending::Operator {
+                operator: VimOperator::Change,
+                ..
+            } => {
+                self.start_vim_edit(VimAction::Change(VimEditTarget::Search(query)), None);
             }
-            VimPending::Operator(VimOperator::Yank) => {
+            VimPending::Operator {
+                operator: VimOperator::Yank,
+                ..
+            } => {
                 self.apply_vim_search(&query, Some(VimOperator::Yank));
             }
             _ => {
